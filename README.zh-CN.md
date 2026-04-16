@@ -20,8 +20,8 @@
 ### 1. 克隆并安装依赖
 
 ```bash
-git clone https://github.com/yourname/VisaAppointmentWatcher.git
-cd VisaAppointmentWatcher
+git clone https://github.com/CChen19/us-visa-scheduler.git
+cd us-visa-scheduler
 pip install -r requirements.txt
 ```
 
