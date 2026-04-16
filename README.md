@@ -1,98 +1,111 @@
-# 🇺🇸 Visa Appointment Watcher
+# Visa Appointment Watcher
 
-📖 Read this in other languages: [简体中文 🇨🇳](./README.zh-CN.md)
+📖 [简体中文](./README.zh-CN.md)
 
----
+Automatically monitor available U.S. visa appointment dates on [usvisascheduling.com](https://www.usvisascheduling.com), with email alerts and optional auto-booking.
 
-📅 **Automatically monitor available U.S. visa appointment dates and notify you via email!**  
-💡 Powered by Selenium + undetected_chromedriver for stealthy automation  
-✉️ Email alerts for added or removed dates
+## Features
 
----
+- Real-time monitoring of visa appointment availability
+- Supports multiple consulates: Shanghai, Wuhan, Shenyang
+- Randomized check intervals (3–9 min) to reduce detection risk
+- Email notifications on date changes (new / removed slots)
+- Auto-booking within a configurable date range (with dry-run safety mode)
+- Terminal countdown timer between checks
+- Uses `undetected_chromedriver` to bypass bot detection
+- Manual login step for CAPTCHA / 2FA handling
 
-## 🚀 Final Product
-<img src="assert/final.jpg" alt="Final Product" width="300"/>
+## Quick Start
 
-## 🔥 Features
-
-- ✅ Monitors [usvisascheduling.com](https://www.usvisascheduling.com) in real-time
-- 📌 Automatically selects a target city (default: **WUHAN**)
-- ⏱ Checks every 7 minutes
-- ✉️ Sends email alerts for appointment changes
-- 🧩 Uses `undetected_chromedriver` to reduce bot detection
-- 🧪 Manual login supported for CAPTCHA handling
-
----
-
-## 🚀 How to Run
-
-### 1. Clone the repo
+### 1. Clone & install
 
 ```bash
-git clone https://github.com/yourname/visa-appointment-watcher.git
-cd visa-appointment-watcher
-```
-
-### 2. Install dependencies
-
-```bash
+git clone https://github.com/yourname/VisaAppointmentWatcher.git
+cd VisaAppointmentWatcher
 pip install -r requirements.txt
 ```
 
-### 3. Configure email
+### 2. Configure
 
-Edit the `sendmail()` function:
+Open `main.py` and edit the top section:
+
+**Consulate**
+
+```python
+LOCATION_NAME = "SHANGHAI"  # "SHANGHAI" / "WUHAN" / "SHENYANG"
+```
+
+**Email** — use an SMTP app password (e.g. QQ Mail authorization code)
 
 ```python
 SMTP_SERVER = "smtp.qq.com"
-SMTP_PORT = 465  # Use 465 for SSL
-EMAIL_SENDER = "xxx@qq.com"
-EMAIL_PASSWORD = "xxx"
-EMAIL_RECEIVER = "xxx@qq.com"
+SMTP_PORT = 465
+EMAIL_SENDER = "your_email@qq.com"
+EMAIL_PASSWORD = "your_smtp_app_password"
+EMAIL_RECEIVER = "your_receiver@example.com"
 ```
 
-> Make sure SMTP is enabled and use an **app password** from QQ Mail.
-> You can use other mail services, but you may need to adjust the SMTP settings.
+**Auto-booking** (optional)
 
-### 4. Run the script
+```python
+BOOKING_CONFIG = {
+    "BOOKING_ENABLED": False,
+    "EARLIEST_DATE_STR": "2025-08-01",
+    "LATEST_DATE_STR": "2025-08-31",
+    "DRY_RUN": True,              # True = preview only, False = submit
+    "KEEP_BROWSER_OPEN_ON_EXIT": True
+}
+```
+
+**Applicant name** — search for `Your Name` in `main.py` and replace it with the name shown on the appointment page.
+
+### 3. Run
 
 ```bash
 python main.py
 ```
 
-Follow the prompt to manually log in, complete any CAPTCHA, then press Enter.
+The browser will open. Log in manually, complete any CAPTCHA, then press **Enter** in the terminal. The script takes over from there.
 
-> You can also run it in the background using `nohup` or a task scheduler like `tmux`.
+> Tip: use `tmux` or `screen` to keep it running on a remote server.
 
----
+## How It Works
 
-## 📬 Email Example
+1. Opens the scheduling site; you log in manually.
+2. Enters a monitor loop: refreshes the page, selects the target consulate, reads available dates from the calendar.
+3. Compares with the previous snapshot; sends an email if anything changed.
+4. If auto-booking is enabled and a date falls within your range, it clicks through the booking flow.
+5. Waits a randomized interval before repeating.
+
+## Email Example
 
 ```
-Subject: Visa Appointment Update
+Subject: 【签证监控】SHANGHAI F1签证日期变动！
 
-Newly available dates:
-  + 2025-07-14
-  + 2025-07-20
+领事馆: SHANGHAI
 
-Dates no longer available:
-  - 2025-07-11
+新增的可预约日期:
+  ✅ 2025-08-15
 
-All currently available:
-  * 2025-07-14
-  * 2025-07-20
+不再可用的日期:
+  ❌ 2025-08-10
+
+当前所有可预约日期:
+  - 2025-08-15
+  - 2025-08-22
 ```
 
----
+## Disclaimer
 
-## ⚠️ Disclaimer
+- For personal / educational use only.
+- The author(s) are not responsible for any consequences of using this tool.
+- Manual login may be required after session expiry.
+- Stable internet connection recommended.
 
-- For educational use only — not for commercial purposes
-- Manual login may be required after browser refresh
-- Stable internet connection recommended
+## Acknowledgements
 
----
+This project is based on the original work by [SYuan03](https://github.com/SYuan03/VisaAppointmentWatcher). Thanks for the great foundation!
 
-## 📄 License
+## License
 
-[MIT License](./LICENSE)
+[MIT](./LICENSE)
