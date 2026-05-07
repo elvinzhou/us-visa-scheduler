@@ -73,8 +73,10 @@ fi
 
 # ── 5. Python deps + tmux ────────────────────────────────────────────────────
 echo "[5/6] Installing Python dependencies..."
-sudo apt-get install -y -qq python3-pip tmux
-pip3 install --quiet -r "$(dirname "$0")/requirements.txt"
+sudo apt-get install -y -qq python3-pip python3-venv python3-full tmux
+REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+python3 -m venv "$REPO_DIR/.venv"
+"$REPO_DIR/.venv/bin/pip" install --quiet -r "$REPO_DIR/requirements.txt"
 
 # ── 6. Systemd services ───────────────────────────────────────────────────────
 echo "[6/6] Creating systemd services and enabling OS firewall..."
@@ -142,6 +144,7 @@ echo "      Dest Port   : 6080"
 echo
 echo "  To run the scheduler (copy .env.example → .env and fill it in first):"
 echo "    tmux new -s visa"
+echo "    source .venv/bin/activate"
 echo "    python3 main.py"
 echo "    # complete login in the browser desktop tab, press Enter, then"
 echo "    # detach tmux with Ctrl+B D — the script keeps running"
