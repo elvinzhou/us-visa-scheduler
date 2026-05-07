@@ -23,6 +23,8 @@ Automatically monitor available U.S. visa appointment dates on [usvisascheduling
 ```bash
 git clone https://github.com/elvinzhou/us-visa-scheduler.git
 cd us-visa-scheduler
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -71,6 +73,7 @@ The `.env` file is gitignored and never committed.
 ### 3. Run
 
 ```bash
+source .venv/bin/activate
 python main.py
 ```
 
@@ -120,6 +123,7 @@ In the VM desktop, open a terminal:
 cd us-visa-scheduler
 cp .env.example .env   # fill in your values
 tmux new -s visa
+source .venv/bin/activate
 python3 main.py
 ```
 

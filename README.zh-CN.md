@@ -23,6 +23,8 @@
 ```bash
 git clone https://github.com/elvinzhou/us-visa-scheduler.git
 cd us-visa-scheduler
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -71,6 +73,7 @@ EMAIL_RECEIVER=your_receiver@example.com
 ### 3. 运行
 
 ```bash
+source .venv/bin/activate
 python main.py
 ```
 
@@ -120,6 +123,7 @@ chmod +x setup.sh && ./setup.sh
 cd us-visa-scheduler
 cp .env.example .env   # 填写你的配置
 tmux new -s visa
+source .venv/bin/activate
 python3 main.py
 ```
 
