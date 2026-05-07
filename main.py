@@ -17,7 +17,7 @@ from email.header import Header
 
 # --- 全局配置 ---
 # 选择您要监控的领事馆: "SHANGHAI" / "WUHAN" / "SHENYANG"
-LOCATION_NAME = "SHANGHAI"
+LOCATION_NAME = "SHENYANG"
 
 LOCATIONS = {
     "SHANGHAI": {"name": "SHANGHAI", "id": "096bf614-b0db-ec11-a7b4-001dd80234f6"},
