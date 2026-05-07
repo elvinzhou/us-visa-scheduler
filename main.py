@@ -108,6 +108,7 @@ def countdown_timer(total_seconds):
 def main():
     options = uc.ChromeOptions()
     options.add_argument("--no-first-run --no-service-autorun --password-store=basic")
+    options.add_argument("--proxy-server=socks5://127.0.0.1:40000")
     driver = uc.Chrome(options=options)
     
     booking_completed_successfully = False
