@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
 from datetime import date, datetime
 from email.utils import formataddr
+import os
 import random
+import traceback
+from dotenv import load_dotenv
+load_dotenv()
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select, WebDriverWait
@@ -31,12 +35,15 @@ BOOKING_CONFIG = {
     "KEEP_BROWSER_OPEN_ON_EXIT": True    # 任务完成后是否保持浏览器打开
 }
 
-# 邮件配置 (请替换为你自己的信息)
-SMTP_SERVER = "smtp.qq.com"
-SMTP_PORT = 465
-EMAIL_SENDER = "your_email@qq.com"
-EMAIL_PASSWORD = "your_smtp_app_password"
-EMAIL_RECEIVER = "your_receiver@example.com"
+# 申请人姓名 (必须与预约系统中显示的完全一致，用于确认页面已正确加载)
+APPLICANT_NAME = os.environ["APPLICANT_NAME"]
+
+# 邮件配置 — 通过环境变量或 .env 文件设置
+SMTP_SERVER = os.environ.get("SMTP_SERVER", "smtp.qq.com")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "465"))
+EMAIL_SENDER = os.environ["EMAIL_SENDER"]
+EMAIL_PASSWORD = os.environ["EMAIL_PASSWORD"]
+EMAIL_RECEIVER = os.environ["EMAIL_RECEIVER"]
 
 # --- 邮件发送函数 ---
 def send_notification_email(added_dates, removed_dates, all_dates):
@@ -137,8 +144,7 @@ def main():
                 print("页面已刷新，等待页面加载...")
 
                 # 等待并选择领事馆
-                # TODO: 将下面的 'Your Name' 替换为你在预约系统中显示的申请人姓名
-                wait.until(EC.visibility_of_element_located((By.XPATH, "//label[text()='Your Name']")))
+                wait.until(EC.visibility_of_element_located((By.XPATH, f"//label[text()='{APPLICANT_NAME}']")))
                 print("申请人加载成功，等待领事馆选择下拉框及其选项加载...")
 
                 option_locator = (By.XPATH, f"//select[@id='post_select']/option[@value='{LOCATION_VALUE_ID}']")
@@ -242,8 +248,13 @@ def main():
 
             except Exception as e:
                 print(f"本轮检查出现错误: {e}")
-                print("将等待1分钟后重试。")
-                countdown_timer(60)
+                traceback.print_exc()
+                if "usvisascheduling.com" not in driver.current_url or "login" in driver.current_url.lower():
+                    print("检测到会话已过期或被重定向至登录页面，请重新手动登录后按 Enter 继续...")
+                    input()
+                else:
+                    print("将等待1分钟后重试。")
+                    countdown_timer(60)
         
         if booking_completed_successfully:
             print("\n" + "="*50)
