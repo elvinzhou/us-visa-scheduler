@@ -52,12 +52,16 @@ sudo apt-get install -y -qq novnc websockify
 echo "[4/6] Installing browser..."
 ARCH=$(dpkg --print-architecture)
 if [ "$ARCH" = "amd64" ]; then
-    # Full Google Chrome on x86 — better compatibility with undetected_chromedriver
-    wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-    sudo apt-get install -y -qq ./google-chrome-stable_current_amd64.deb
-    rm google-chrome-stable_current_amd64.deb
+    # Add Google's apt repo — more reliable than downloading the .deb directly
+    curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
+        | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg
+    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] \
+http://dl.google.com/linux/chrome/deb/ stable main" \
+        | sudo tee /etc/apt/sources.list.d/google-chrome.list > /dev/null
+    sudo apt-get update -qq
+    sudo apt-get install -y -qq google-chrome-stable
 else
-    # ARM (Ampere A1) — use Chromium from apt
+    # ARM — use Chromium from apt
     sudo apt-get install -y -qq chromium-browser chromium-chromedriver
     echo
     echo "  NOTE (ARM): undetected_chromedriver targets Google Chrome by default."
