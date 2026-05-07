@@ -17,7 +17,7 @@ from email.header import Header
 
 # --- 全局配置 ---
 # 选择您要监控的领事馆: "SHANGHAI" / "WUHAN" / "SHENYANG"
-LOCATION_NAME = "SHANGHAI"
+LOCATION_NAME = "SHENYANG"
 
 LOCATIONS = {
     "SHANGHAI": {"name": "SHANGHAI", "id": "096bf614-b0db-ec11-a7b4-001dd80234f6"},
@@ -43,7 +43,7 @@ SMTP_SERVER = os.environ.get("SMTP_SERVER", "smtp.qq.com")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "465"))
 EMAIL_SENDER = os.environ["EMAIL_SENDER"]
 EMAIL_PASSWORD = os.environ["EMAIL_PASSWORD"]
-EMAIL_RECEIVER = os.environ["EMAIL_RECEIVER"]
+EMAIL_RECEIVERS = [r.strip() for r in os.environ["EMAIL_RECEIVER"].split(",")]
 
 # --- 邮件发送函数 ---
 def send_notification_email(added_dates, removed_dates, all_dates):
@@ -82,15 +82,15 @@ def _send_email(subject, body):
     try:
         msg = MIMEText(body, "plain", "utf-8")
         msg["From"] = formataddr((f"{LOCATION_NAME}签证监控", EMAIL_SENDER))
-        msg["To"] = EMAIL_RECEIVER
+        msg["To"] = ", ".join(EMAIL_RECEIVERS)
         msg["Subject"] = Header(subject, 'utf-8')
         print("正在连接邮件服务器...")
         server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
         server.login(EMAIL_SENDER, EMAIL_PASSWORD)
         print("邮件服务器登录成功，正在发送邮件...")
-        server.sendmail(EMAIL_SENDER, [EMAIL_RECEIVER], msg.as_string())
+        server.sendmail(EMAIL_SENDER, EMAIL_RECEIVERS, msg.as_string())
         server.quit()
-        print(f"邮件已成功发送至 {EMAIL_RECEIVER}")
+        print(f"邮件已成功发送至 {', '.join(EMAIL_RECEIVERS)}")
     except Exception as e:
         print(f"邮件发送失败，错误: {e}")
 

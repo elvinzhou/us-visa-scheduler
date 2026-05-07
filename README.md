@@ -33,7 +33,7 @@ pip install -r requirements.txt
 **Consulate** — edit `main.py`:
 
 ```python
-LOCATION_NAME = "SHANGHAI"  # "SHANGHAI" / "WUHAN" / "SHENYANG"
+LOCATION_NAME = "SHENYANG"  # "SHANGHAI" / "WUHAN" / "SHENYANG"
 ```
 
 **Auto-booking** — also in `main.py` (optional):
