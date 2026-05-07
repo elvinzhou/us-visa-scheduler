@@ -33,7 +33,7 @@ pip install -r requirements.txt
 **领事馆选择** — 编辑 `main.py`：
 
 ```python
-LOCATION_NAME = "SHANGHAI"  # "SHANGHAI" / "WUHAN" / "SHENYANG"
+LOCATION_NAME = "SHENYANG"  # "SHANGHAI" / "WUHAN" / "SHENYANG"
 ```
 
 **自动预定** — 同样在 `main.py` 中（可选）：
