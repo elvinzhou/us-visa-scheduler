@@ -4,41 +4,87 @@
 
 自动监控 [usvisascheduling.com](https://www.usvisascheduling.com) 上的美国签证可预约日期，支持邮件提醒和自动预定。
 
-## 功能
+登录步骤需要手动完成验证码，因此脚本需要一个可视化浏览器。以下部署方案在云服务器上运行，通过浏览器访问桌面——无需安装 VNC 客户端或在本地运行。
 
-- 实时监控签证预约日期变动
-- 支持多个领事馆：上海、武汉、沈阳
-- 随机化检查间隔（3–9 分钟），降低被检测风险
-- 日期变动时自动发送邮件通知（新增 / 移除）
-- 可配置日期范围的自动预定（含安全模式 Dry Run）
-- 终端内可视化倒计时
-- 使用 `undetected_chromedriver` 规避反爬检测
-- 支持手动登录以处理验证码 / 二次验证
-- 自动检测会话过期并提示重新登录
+## 前提条件
 
-## 快速开始
+- 一台运行 Ubuntu 22.04、内存至少 1 GB 的云服务器（任意服务商均可，如 AWS Lightsail、Oracle Cloud 等）
+- 在服务商防火墙中开放 6080 端口（用于桌面访问）
+- 可以 SSH 登录到该服务器
 
-### 1. 克隆并安装依赖
+## 第一步 — 初始化服务器
+
+SSH 登录服务器，克隆仓库，运行初始化脚本：
 
 ```bash
 git clone https://github.com/elvinzhou/us-visa-scheduler.git
 cd us-visa-scheduler
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+chmod +x setup.sh && ./setup.sh
 ```
 
-### 2. 配置
+脚本会提示设置 VNC 密码，然后自动安装以下内容：
+- Xfce 桌面 + TigerVNC（仅监听本地）
+- noVNC — 通过 6080 端口在浏览器中访问桌面
+- Google Chrome
+- Python 虚拟环境及所有依赖
+- systemd 服务（重启服务器后自动恢复运行）
 
-**领事馆选择** — 编辑 `main.py`：
+## 第二步 — 开放 6080 端口
+
+在服务商的防火墙/安全组中，添加一条允许 TCP 6080 端口入站的规则。建议将来源限制为你自己的 IP 以提高安全性。
+
+## 第三步 — 配置 Cloudflare WARP（推荐）
+
+该网站会屏蔽数据中心的 IP 段。WARP 以代理模式运行，将 Chrome 流量通过 Cloudflare 网络转发，同时不影响 SSH 连接：
+
+```bash
+curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg \
+    | sudo gpg --dearmor -o /usr/share/keyrings/cloudflare-warp.gpg
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp.gpg] \
+https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" \
+    | sudo tee /etc/apt/sources.list.d/cloudflare-warp.list
+sudo apt-get update && sudo apt-get install -y cloudflare-warp
+warp-cli register
+warp-cli mode proxy
+warp-cli connect
+```
+
+验证是否正常工作——以下命令应返回一个 Cloudflare IP：
+
+```bash
+curl --proxy socks5://127.0.0.1:40000 ifconfig.me
+```
+
+脚本中的 Chrome 已配置为自动使用 WARP 代理（端口 40000）。
+
+## 第四步 — 配置
+
+将 `.env.example` 复制为 `.env` 并填写你的信息：
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+```dotenv
+# 申请人姓名（必须与预约页面上显示的完全一致）
+APPLICANT_NAME=你的姓名
+
+# 邮件通知 — 支持多个收件人，用逗号分隔
+EMAIL_SENDER=your_email@qq.com
+EMAIL_PASSWORD=your_smtp_app_password
+EMAIL_RECEIVER=receiver1@example.com,receiver2@example.com
+
+# 可选 — 以下为默认值
+# SMTP_SERVER=smtp.qq.com
+# SMTP_PORT=465
+```
+
+如需修改领事馆或自动预定设置，编辑 `main.py` 顶部：
 
 ```python
 LOCATION_NAME = "SHENYANG"  # "SHANGHAI" / "WUHAN" / "SHENYANG"
-```
 
-**自动预定** — 同样在 `main.py` 中（可选）：
-
-```python
 BOOKING_CONFIG = {
     "BOOKING_ENABLED": False,
     "EARLIEST_DATE_STR": "2025-08-01",
@@ -48,102 +94,44 @@ BOOKING_CONFIG = {
 }
 ```
 
-**环境变量** — 将 `.env.example` 复制为 `.env` 并填写你的信息：
+## 第五步 — 访问桌面
 
-```bash
-cp .env.example .env
-```
+在浏览器中打开 `http://<服务器公网IP>:6080/vnc.html`，输入 VNC 密码，即可在浏览器标签页中看到完整桌面。
 
-```dotenv
-# 申请人姓名（必须与预约页面上显示的完全一致）
-APPLICANT_NAME=你的姓名
+## 第六步 — 运行监控脚本
 
-# 邮件配置（使用 SMTP 授权码，如 QQ 邮箱授权码）
-EMAIL_SENDER=your_email@qq.com
-EMAIL_PASSWORD=your_smtp_app_password
-EMAIL_RECEIVER=your_receiver@example.com
-
-# 可选 — 以下为默认值
-# SMTP_SERVER=smtp.qq.com
-# SMTP_PORT=465
-```
-
-`.env` 文件已被加入 `.gitignore`，不会被提交到代码仓库。
-
-### 3. 运行
-
-```bash
-source .venv/bin/activate
-python main.py
-```
-
-浏览器会自动打开，请手动完成登录和验证码，然后在终端按 **Enter** 键。脚本会接管后续操作。
-
-> 提示：可以使用 `tmux` 或 `screen` 在关闭终端后保持运行。
-
-## 部署到 Oracle Cloud（免费，浏览器桌面）
-
-登录步骤需要可视化浏览器来完成验证码。项目内附的 `setup.sh` 可在 Oracle Cloud **永久免费** 的 Ubuntu 22.04 虚拟机上自动搭建完整桌面环境，通过 noVNC 在浏览器中访问——无需安装任何 VNC 客户端。
-
-### 1. 创建虚拟机
-
-在 [cloud.oracle.com](https://cloud.oracle.com) 注册并创建免费虚拟机：
-- **规格**：`VM.Standard.E2.1.Micro`（AMD x86，1 OCPU / 1 GB 内存）— 与 Chrome 兼容性最佳
-- **镜像**：Ubuntu 22.04
-- 创建时下载 SSH 密钥
-
-### 2. 运行初始化脚本
-
-打开 **Cloud Shell**（OCI 控制台顶部导航栏的 `>_` 图标），SSH 登录到虚拟机后执行：
-
-```bash
-git clone https://github.com/elvinzhou/us-visa-scheduler.git
-cd us-visa-scheduler
-chmod +x setup.sh && ./setup.sh
-```
-
-脚本会提示你设置 VNC 密码，然后自动安装并配置所有组件（桌面环境、noVNC、Chrome、Python 依赖、systemd 服务）。
-
-### 3. 在 OCI 中开放 6080 端口
-
-在 OCI 控制台中：
-> 网络 → 虚拟云网络 → 你的 VCN → 安全列表 → 默认安全列表 → 添加入站规则
-> - 源 CIDR：`0.0.0.0/0`（或填写你的 IP 以提高安全性）
-> - 协议：TCP，端口：`6080`
-
-### 4. 访问桌面
-
-在浏览器中打开 `http://<虚拟机公网IP>:6080/vnc.html`，输入 VNC 密码，即可看到完整的 Xfce 桌面。
-
-### 5. 运行监控脚本
-
-在虚拟机桌面中打开终端：
+在桌面内打开终端：
 
 ```bash
 cd us-visa-scheduler
-cp .env.example .env   # 填写你的配置
 tmux new -s visa
 source .venv/bin/activate
 python3 main.py
 ```
 
-在弹出的浏览器中完成验证码登录，按下 **Enter**，然后用 **Ctrl+B D** 分离 tmux 并关闭浏览器标签页。脚本将在后台持续运行，虚拟机重启后也会自动恢复。
+Chrome 窗口会自动打开，手动完成登录和验证码，然后在终端按 **Enter**。脚本将接管后续的循环监控。
+
+使用 **Ctrl+B D** 分离 tmux 并关闭浏览器标签页——脚本在后台持续运行。之后如需重新查看：
+
+```bash
+tmux attach -t visa
+```
 
 ## 工作原理
 
-1. 打开预约网站，你手动完成登录。
+1. 打开预约网站，手动完成登录。
 2. 进入监控循环：刷新页面 → 选择目标领事馆 → 读取日历上的可用日期。
 3. 与上一次快照对比，有变动则发送邮件。
 4. 如果开启了自动预定，且发现符合日期范围的时间段，会自动走完预定流程。
-5. 等待随机间隔后重复。
+5. 等待随机间隔（3–9 分钟）后重复。
 6. 如果检测到会话过期（跳转至登录页），会提示重新登录，而不是静默重试。
 
 ## 邮件示例
 
 ```
-Subject: 【签证监控】SHANGHAI F1签证日期变动！
+Subject: 【签证监控】SHENYANG F1签证日期变动！
 
-领事馆: SHANGHAI
+领事馆: SHENYANG
 
 新增的可预约日期:
   ✅ 2025-08-15
@@ -160,12 +148,12 @@ Subject: 【签证监控】SHANGHAI F1签证日期变动！
 
 - 仅供个人学习交流使用，请勿用于商业目的。
 - 作者不对使用本工具产生的任何后果负责。
-- 登录状态过期后可能需要重新手动登录。
+- 首次运行及会话过期后需手动重新登录。
 - 请保持网络稳定以避免中断。
 
 ## 致谢
 
-本项目基于 [SYuan03](https://github.com/SYuan03/VisaAppointmentWatcher) 的原始工作进行改进。感谢原作者的优秀贡献！
+本项目基于 [SYuan03](https://github.com/SYuan03/VisaAppointmentWatcher) 的原始工作进行改进。
 
 ## License
 
