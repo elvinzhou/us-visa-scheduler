@@ -10,9 +10,10 @@ import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, UnexpectedAlertPresentException
 import time
 import smtplib
+import ssl
 from email.mime.text import MIMEText
 from email.header import Header
 
@@ -92,20 +93,52 @@ def send_status_email(check_count):
     )
 
 def _send_email(subject, body):
-    try:
-        msg = MIMEText(body, "plain", "utf-8")
-        msg["From"] = formataddr((f"{LOCATION_NAME}签证监控", EMAIL_SENDER))
-        msg["To"] = ", ".join(EMAIL_RECEIVERS)
-        msg["Subject"] = Header(subject, 'utf-8')
-        print("正在连接邮件服务器...")
-        server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
-        server.login(EMAIL_SENDER, EMAIL_PASSWORD)
-        print("邮件服务器登录成功，正在发送邮件...")
-        server.sendmail(EMAIL_SENDER, EMAIL_RECEIVERS, msg.as_string())
-        server.quit()
-        print(f"邮件已成功发送至 {', '.join(EMAIL_RECEIVERS)}")
-    except Exception as e:
-        print(f"邮件发送失败，错误: {e}")
+    msg = MIMEText(body, "plain", "utf-8")
+    msg["From"] = formataddr((f"{LOCATION_NAME}签证监控", EMAIL_SENDER))
+    msg["To"] = ", ".join(EMAIL_RECEIVERS)
+    msg["Subject"] = Header(subject, 'utf-8')
+
+    def _try_send():
+        # Strategy 1: SMTP_SSL on configured port (e.g. 465) with explicit context
+        ctx = ssl.create_default_context()
+        try:
+            print(f"尝试 SMTP_SSL 连接 {SMTP_SERVER}:{SMTP_PORT}...")
+            server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, context=ctx, timeout=30)
+            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_SENDER, EMAIL_RECEIVERS, msg.as_string())
+            server.quit()
+            return
+        except Exception as e1:
+            print(f"SMTP_SSL 失败: {e1}")
+
+        # Strategy 2: STARTTLS on port 587
+        starttls_port = 587
+        try:
+            print(f"尝试 STARTTLS 连接 {SMTP_SERVER}:{starttls_port}...")
+            server = smtplib.SMTP(SMTP_SERVER, starttls_port, timeout=30)
+            server.ehlo()
+            server.starttls(context=ctx)
+            server.ehlo()
+            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_SENDER, EMAIL_RECEIVERS, msg.as_string())
+            server.quit()
+            return
+        except Exception as e2:
+            print(f"STARTTLS 失败: {e2}")
+
+        raise RuntimeError(f"所有连接方式均失败")
+
+    for attempt in range(1, 4):
+        try:
+            print(f"正在连接邮件服务器 (第 {attempt} 次)...")
+            _try_send()
+            print(f"邮件已成功发送至 {', '.join(EMAIL_RECEIVERS)}")
+            return
+        except Exception as e:
+            print(f"邮件发送失败 (第 {attempt} 次)，错误: {e}")
+            if attempt < 3:
+                time.sleep(5 * attempt)
+    print("邮件发送最终失败，已跳过。")
 
 def countdown_timer(total_seconds):
     """在终端显示倒计时，单行刷新直到结束。"""
@@ -158,6 +191,16 @@ def main():
                 print(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] 开始新一轮检查...")
                 driver.refresh()
                 print("页面已刷新，等待页面加载...")
+
+                # Dismiss any JS alert that the site may show after a refresh
+                try:
+                    alert = WebDriverWait(driver, 5).until(EC.alert_is_present())
+                    print(f"检测到弹窗: \"{alert.text}\"，已自动关闭，稍后重试。")
+                    alert.dismiss()
+                    countdown_timer(60)
+                    continue
+                except TimeoutException:
+                    pass
 
                 # 等待并选择领事馆
                 wait.until(EC.visibility_of_element_located((By.XPATH, f"//label[text()='{APPLICANT_NAME}']")))
@@ -273,10 +316,24 @@ def main():
                         print(f"常规等待 {wait_minutes} 分钟...")
                         countdown_timer(wait_minutes * 60)
 
+            except UnexpectedAlertPresentException as e:
+                # Dismiss the alert before touching driver.current_url, which
+                # would itself raise if the alert is still open.
+                print(f"本轮检查出现错误: {e}")
+                try:
+                    driver.switch_to.alert.dismiss()
+                    print("弹窗已关闭，等待1分钟后重试。")
+                except Exception:
+                    pass
+                countdown_timer(60)
             except Exception as e:
                 print(f"本轮检查出现错误: {e}")
                 traceback.print_exc()
-                if "usvisascheduling.com" not in driver.current_url or "login" in driver.current_url.lower():
+                try:
+                    current_url = driver.current_url
+                except Exception:
+                    current_url = ""
+                if "usvisascheduling.com" not in current_url or "login" in current_url.lower():
                     print("检测到会话已过期或被重定向至登录页面，请重新手动登录后按 Enter 继续...")
                     send_relogin_email()
                     input()
