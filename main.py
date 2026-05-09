@@ -10,7 +10,7 @@ import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, UnexpectedAlertPresentException
 import time
 import smtplib
 from email.mime.text import MIMEText
@@ -158,6 +158,16 @@ def main():
                 print(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] 开始新一轮检查...")
                 driver.refresh()
                 print("页面已刷新，等待页面加载...")
+
+                # Dismiss any JS alert that the site may show after a refresh
+                try:
+                    alert = WebDriverWait(driver, 5).until(EC.alert_is_present())
+                    print(f"检测到弹窗: \"{alert.text}\"，已自动关闭，稍后重试。")
+                    alert.dismiss()
+                    countdown_timer(60)
+                    continue
+                except TimeoutException:
+                    pass
 
                 # 等待并选择领事馆
                 wait.until(EC.visibility_of_element_located((By.XPATH, f"//label[text()='{APPLICANT_NAME}']")))
