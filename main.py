@@ -166,8 +166,7 @@ def main():
         # 动态等待配置
         SHORT_WAIT_MIN, SHORT_WAIT_MAX = 3, 5
         LONG_REST_MIN, LONG_REST_MAX = 7, 9
-        CHECKS_BEFORE_LONG_REST = random.randint(4, 7)
-        check_counter = 0
+        checks_until_long_rest = random.randint(4, 7)
         last_status_email_time = time.time()
         checks_since_last_status = 0
 
@@ -306,7 +305,6 @@ def main():
                         booking_completed_successfully = True
                         break
 
-                check_counter += 1
                 checks_since_last_status += 1
 
                 if not current_dates and time.time() - last_status_email_time >= 6 * 3600:
@@ -315,17 +313,16 @@ def main():
                     checks_since_last_status = 0
 
                 if not booking_completed_successfully:
-                    print(f"\n--- 本轮检查完成 (第 {check_counter} 次) ---")
-                    if check_counter % CHECKS_BEFORE_LONG_REST == 0:
-                        rest_minutes = random.randint(LONG_REST_MIN, LONG_REST_MAX)
-                        print(f"长时间休眠 {rest_minutes} 分钟...")
-                        countdown_timer(rest_minutes * 60)
-                        CHECKS_BEFORE_LONG_REST = random.randint(4, 7)
-                        check_counter = 0
+                    checks_until_long_rest -= 1
+                    if checks_until_long_rest <= 0:
+                        rest_secs = random.randint(LONG_REST_MIN * 60, LONG_REST_MAX * 60)
+                        print(f"\n--- 本轮检查完成，进入长时休眠 {rest_secs // 60}分{rest_secs % 60:02d}秒... ---")
+                        countdown_timer(rest_secs)
+                        checks_until_long_rest = random.randint(4, 7)
                     else:
-                        wait_minutes = random.randint(SHORT_WAIT_MIN, SHORT_WAIT_MAX)
-                        print(f"常规等待 {wait_minutes} 分钟...")
-                        countdown_timer(wait_minutes * 60)
+                        wait_secs = random.randint(SHORT_WAIT_MIN * 60, SHORT_WAIT_MAX * 60)
+                        print(f"\n--- 本轮检查完成，常规等待 {wait_secs // 60}分{wait_secs % 60:02d}秒... ---")
+                        countdown_timer(wait_secs)
 
             except UnexpectedAlertPresentException as e:
                 # Dismiss the alert before touching driver.current_url, which
