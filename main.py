@@ -218,18 +218,20 @@ def main():
                 print("领事馆选择成功，等待日历加载...")
                 available_dates = set()
                 try:
-                    # Wait until loading is truly done: either the no-availability
-                    # error row appears, or at least one green day cell is present.
-                    wait.until(lambda d: (
-                        d.find_elements(By.ID, "error_row") and d.find_element(By.ID, "error_row").is_displayed()
-                    ) or d.find_elements(By.CSS_SELECTOR, "td[data-handler='selectDay'].greenday"))
+                    # Wait for "正在加载" to disappear from the page before reading results.
+                    wait.until(lambda d: "正在加载" not in d.find_element(By.TAG_NAME, "body").text)
+                    print("加载完成，正在读取结果...")
 
                     error_rows = driver.find_elements(By.ID, "error_row")
                     if error_rows and error_rows[0].is_displayed():
-                        print("日历已加载，当前无可用时段。")
+                        error_text = error_rows[0].text.strip()
+                        if "无可用时段" in error_text:
+                            print("当前无可用时段。")
+                        else:
+                            print(f"页面返回错误: {error_text}")
                     else:
-                        print("日历加载完成！")
                         day_cells = driver.find_elements(By.CSS_SELECTOR, "td[data-handler='selectDay'].greenday")
+                        print(f"日历加载完成，发现 {len(day_cells)} 个可用日期。")
                         for cell in day_cells:
                             try:
                                 day = cell.find_element(By.CSS_SELECTOR, "a.ui-state-default").text
@@ -241,7 +243,7 @@ def main():
                 except TimeoutException:
                     if "usvisascheduling.com" not in driver.current_url or "login" in driver.current_url.lower():
                         raise
-                    print("日历未出现，当前暂无可用日期。")
+                    print("等待加载超时，跳过本轮。")
 
                 if available_dates != current_dates:
                     print("---!!! 日期有变动 !!! ---")
