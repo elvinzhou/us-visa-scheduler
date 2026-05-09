@@ -13,6 +13,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, UnexpectedAlertPresentException
 import time
 import smtplib
+import ssl
 from email.mime.text import MIMEText
 from email.header import Header
 
@@ -96,14 +97,41 @@ def _send_email(subject, body):
     msg["From"] = formataddr((f"{LOCATION_NAME}签证监控", EMAIL_SENDER))
     msg["To"] = ", ".join(EMAIL_RECEIVERS)
     msg["Subject"] = Header(subject, 'utf-8')
+
+    def _try_send():
+        # Strategy 1: SMTP_SSL on configured port (e.g. 465) with explicit context
+        ctx = ssl.create_default_context()
+        try:
+            print(f"尝试 SMTP_SSL 连接 {SMTP_SERVER}:{SMTP_PORT}...")
+            server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, context=ctx, timeout=30)
+            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_SENDER, EMAIL_RECEIVERS, msg.as_string())
+            server.quit()
+            return
+        except Exception as e1:
+            print(f"SMTP_SSL 失败: {e1}")
+
+        # Strategy 2: STARTTLS on port 587
+        starttls_port = 587
+        try:
+            print(f"尝试 STARTTLS 连接 {SMTP_SERVER}:{starttls_port}...")
+            server = smtplib.SMTP(SMTP_SERVER, starttls_port, timeout=30)
+            server.ehlo()
+            server.starttls(context=ctx)
+            server.ehlo()
+            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_SENDER, EMAIL_RECEIVERS, msg.as_string())
+            server.quit()
+            return
+        except Exception as e2:
+            print(f"STARTTLS 失败: {e2}")
+
+        raise RuntimeError(f"所有连接方式均失败")
+
     for attempt in range(1, 4):
         try:
             print(f"正在连接邮件服务器 (第 {attempt} 次)...")
-            server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
-            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
-            print("邮件服务器登录成功，正在发送邮件...")
-            server.sendmail(EMAIL_SENDER, EMAIL_RECEIVERS, msg.as_string())
-            server.quit()
+            _try_send()
             print(f"邮件已成功发送至 {', '.join(EMAIL_RECEIVERS)}")
             return
         except Exception as e:
