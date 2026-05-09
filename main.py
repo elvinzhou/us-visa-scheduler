@@ -315,14 +315,14 @@ def main():
                 if not booking_completed_successfully:
                     checks_until_long_rest -= 1
                     if checks_until_long_rest <= 0:
-                        rest_minutes = random.randint(LONG_REST_MIN, LONG_REST_MAX)
-                        print(f"\n--- 本轮检查完成，进入长时休眠 {rest_minutes} 分钟... ---")
-                        countdown_timer(rest_minutes * 60)
+                        rest_secs = random.randint(LONG_REST_MIN * 60, LONG_REST_MAX * 60)
+                        print(f"\n--- 本轮检查完成，进入长时休眠 {rest_secs // 60}分{rest_secs % 60:02d}秒... ---")
+                        countdown_timer(rest_secs)
                         checks_until_long_rest = random.randint(4, 7)
                     else:
-                        wait_minutes = random.randint(SHORT_WAIT_MIN, SHORT_WAIT_MAX)
-                        print(f"\n--- 本轮检查完成，常规等待 {wait_minutes} 分钟... ---")
-                        countdown_timer(wait_minutes * 60)
+                        wait_secs = random.randint(SHORT_WAIT_MIN * 60, SHORT_WAIT_MAX * 60)
+                        print(f"\n--- 本轮检查完成，常规等待 {wait_secs // 60}分{wait_secs % 60:02d}秒... ---")
+                        countdown_timer(wait_secs)
 
             except UnexpectedAlertPresentException as e:
                 # Dismiss the alert before touching driver.current_url, which
