@@ -114,7 +114,8 @@ def countdown_timer(total_seconds):
 # --- 主程序 ---
 def main():
     options = uc.ChromeOptions()
-    options.add_argument("--no-first-run --no-service-autorun --password-store=basic")
+    for arg in ["--no-first-run", "--no-service-autorun", "--password-store=basic"]:
+        options.add_argument(arg)
     driver = uc.Chrome(options=options)
     
     booking_completed_successfully = False
