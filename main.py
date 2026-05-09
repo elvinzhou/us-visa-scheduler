@@ -21,7 +21,7 @@ from openai import OpenAI
 
 # --- 全局配置 ---
 # 选择您要监控的领事馆: "SHANGHAI" / "WUHAN" / "SHENYANG"
-LOCATION_NAME = "SHENYANG"
+LOCATION_NAME = os.environ.get("LOCATION_NAME", "SHENYANG")
 
 LOCATIONS = {
     "SHANGHAI": {"name": "SHANGHAI", "id": "096bf614-b0db-ec11-a7b4-001dd80234f6"},
@@ -32,11 +32,11 @@ LOCATION_VALUE_ID = LOCATIONS[LOCATION_NAME]["id"]
 
 # --- 自动预定配置 ---
 BOOKING_CONFIG = {
-    "BOOKING_ENABLED": False,
-    "EARLIEST_DATE_STR": "2025-08-01",
-    "LATEST_DATE_STR": "2025-08-31",
-    "DRY_RUN": True,
-    "KEEP_BROWSER_OPEN_ON_EXIT": True,
+    "BOOKING_ENABLED": os.environ.get("BOOKING_ENABLED", "false").lower() == "true",
+    "EARLIEST_DATE_STR": os.environ.get("EARLIEST_DATE_STR", "2025-08-01"),
+    "LATEST_DATE_STR": os.environ.get("LATEST_DATE_STR", "2025-08-31"),
+    "DRY_RUN": os.environ.get("DRY_RUN", "true").lower() != "false",
+    "KEEP_BROWSER_OPEN_ON_EXIT": os.environ.get("KEEP_BROWSER_OPEN_ON_EXIT", "true").lower() != "false",
 }
 
 APPLICANT_NAME = os.environ["APPLICANT_NAME"]
