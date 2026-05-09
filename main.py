@@ -328,12 +328,16 @@ def do_login(driver):
             driver.find_element(By.ID, "continue").click()
             time.sleep(3)
 
-            # Success if we've moved off the login page
-            if not _is_login_page(driver):
+            # Success if signInName is gone — means we've advanced past the
+            # credentials page (to KBA page or to the site). We check the element
+            # rather than the URL because the KBA page is also on b2clogin and
+            # would otherwise be mistaken for the credentials page.
+            try:
+                driver.find_element(By.ID, "signInName")
+                print(f"登录未成功，第 {attempt + 1} 次重试...")
+            except NoSuchElementException:
                 logged_in = True
                 break
-
-            print(f"登录未成功，第 {attempt + 1} 次重试...")
         except Exception as e:
             print(f"登录第 {attempt + 1} 次出错: {e}")
             time.sleep(RETRY_DELAY)
@@ -345,7 +349,7 @@ def do_login(driver):
 
     # Stage 2: security questions (may or may not appear)
     try:
-        WebDriverWait(driver, 10).until(
+        WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "#kba1_response, #kba2_response, #kba3_response"))
         )
         print("检测到安全问题页面，正在填写...")
