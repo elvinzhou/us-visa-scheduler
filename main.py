@@ -218,17 +218,24 @@ def main():
                 print("领事馆选择成功，等待日历加载...")
                 available_dates = set()
                 try:
-                    wait.until(EC.visibility_of_element_located((By.ID, "datepicker-message")))
-                    print("日历加载完成！")
-                    day_cells = driver.find_elements(By.CSS_SELECTOR, "td[data-handler='selectDay'].greenday")
-                    for cell in day_cells:
-                        try:
-                            day = cell.find_element(By.CSS_SELECTOR, "a.ui-state-default").text
-                            month = int(cell.get_attribute("data-month")) + 1
-                            year = int(cell.get_attribute("data-year"))
-                            available_dates.add(date(year, month, int(day)).isoformat())
-                        except Exception as e:
-                            print(f"解析日期单元格时出错: {e}")
+                    # Wait for the message element to appear
+                    msg_el = wait.until(EC.visibility_of_element_located((By.ID, "datepicker-message")))
+                    # Wait until the loading spinner text is gone
+                    wait.until(lambda d: "正在加载" not in d.find_element(By.ID, "datepicker-message").text)
+                    msg_text = driver.find_element(By.ID, "datepicker-message").text.strip()
+                    if "无可用时段" in msg_text:
+                        print("日历已加载，当前无可用时段。")
+                    else:
+                        print("日历加载完成！")
+                        day_cells = driver.find_elements(By.CSS_SELECTOR, "td[data-handler='selectDay'].greenday")
+                        for cell in day_cells:
+                            try:
+                                day = cell.find_element(By.CSS_SELECTOR, "a.ui-state-default").text
+                                month = int(cell.get_attribute("data-month")) + 1
+                                year = int(cell.get_attribute("data-year"))
+                                available_dates.add(date(year, month, int(day)).isoformat())
+                            except Exception as e:
+                                print(f"解析日期单元格时出错: {e}")
                 except TimeoutException:
                     if "usvisascheduling.com" not in driver.current_url or "login" in driver.current_url.lower():
                         raise
