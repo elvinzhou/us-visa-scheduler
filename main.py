@@ -10,6 +10,7 @@ import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 import time
 import smtplib
 from email.mime.text import MIMEText
@@ -78,6 +79,18 @@ def send_booking_confirmation_email(booked_date, booked_time):
         body += "\n脚本已执行完毕，浏览器保持打开状态供您检查。"
     _send_email(subject, body)
 
+def send_relogin_email():
+    _send_email(
+        f"【签证监控】{LOCATION_NAME} 会话已过期，请重新登录",
+        f"领事馆: {LOCATION_NAME}\n\n监控脚本检测到登录会话已过期，已暂停监控。\n请重新登录预约系统并在终端按 Enter 键继续。",
+    )
+
+def send_status_email(check_count):
+    _send_email(
+        f"【签证监控】{LOCATION_NAME} 运行正常，暂无可用日期",
+        f"领事馆: {LOCATION_NAME}\n\n监控脚本运行正常，过去6小时内共检查 {check_count} 次，暂未发现可用日期。",
+    )
+
 def _send_email(subject, body):
     try:
         msg = MIMEText(body, "plain", "utf-8")
@@ -107,7 +120,8 @@ def countdown_timer(total_seconds):
 # --- 主程序 ---
 def main():
     options = uc.ChromeOptions()
-    options.add_argument("--no-first-run --no-service-autorun --password-store=basic")
+    for arg in ["--no-first-run", "--no-service-autorun", "--password-store=basic"]:
+        options.add_argument(arg)
     driver = uc.Chrome(options=options)
     
     booking_completed_successfully = False
@@ -121,6 +135,8 @@ def main():
         LONG_REST_MIN, LONG_REST_MAX = 7, 9
         CHECKS_BEFORE_LONG_REST = random.randint(4, 7)
         check_counter = 0
+        last_status_email_time = time.time()
+        checks_since_last_status = 0
 
         # 1. 手动登录
         driver.get("https://www.usvisascheduling.com/zh-CN/schedule/")
@@ -157,19 +173,23 @@ def main():
                 select.select_by_value(LOCATION_VALUE_ID)
                 
                 print("领事馆选择成功，等待日历加载...")
-                wait.until(EC.text_to_be_present_in_element((By.ID, "datepicker-message"), "选择日期"))
-                print("日历加载完成！")
-
                 available_dates = set()
-                day_cells = driver.find_elements(By.CSS_SELECTOR, "td[data-handler='selectDay'].greenday")
-                for cell in day_cells:
-                    try:
-                        day = cell.find_element(By.CSS_SELECTOR, "a.ui-state-default").text
-                        month = int(cell.get_attribute("data-month")) + 1
-                        year = int(cell.get_attribute("data-year"))
-                        available_dates.add(date(year, month, int(day)).isoformat())
-                    except Exception as e:
-                        print(f"解析日期单元格时出错: {e}")
+                try:
+                    wait.until(EC.visibility_of_element_located((By.ID, "datepicker-message")))
+                    print("日历加载完成！")
+                    day_cells = driver.find_elements(By.CSS_SELECTOR, "td[data-handler='selectDay'].greenday")
+                    for cell in day_cells:
+                        try:
+                            day = cell.find_element(By.CSS_SELECTOR, "a.ui-state-default").text
+                            month = int(cell.get_attribute("data-month")) + 1
+                            year = int(cell.get_attribute("data-year"))
+                            available_dates.add(date(year, month, int(day)).isoformat())
+                        except Exception as e:
+                            print(f"解析日期单元格时出错: {e}")
+                except TimeoutException:
+                    if "usvisascheduling.com" not in driver.current_url or "login" in driver.current_url.lower():
+                        raise
+                    print("日历未出现，当前暂无可用日期。")
 
                 if available_dates != current_dates:
                     print("---!!! 日期有变动 !!! ---")
@@ -233,6 +253,13 @@ def main():
                         break
 
                 check_counter += 1
+                checks_since_last_status += 1
+
+                if not current_dates and time.time() - last_status_email_time >= 6 * 3600:
+                    send_status_email(checks_since_last_status)
+                    last_status_email_time = time.time()
+                    checks_since_last_status = 0
+
                 if not booking_completed_successfully:
                     print(f"\n--- 本轮检查完成 (第 {check_counter} 次) ---")
                     if check_counter % CHECKS_BEFORE_LONG_REST == 0:
@@ -251,6 +278,7 @@ def main():
                 traceback.print_exc()
                 if "usvisascheduling.com" not in driver.current_url or "login" in driver.current_url.lower():
                     print("检测到会话已过期或被重定向至登录页面，请重新手动登录后按 Enter 继续...")
+                    send_relogin_email()
                     input()
                 else:
                     print("将等待1分钟后重试。")
