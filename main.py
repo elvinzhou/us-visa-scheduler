@@ -309,7 +309,13 @@ def do_login(driver):
         if attempt == 2:
             print("第3次尝试：直接导航至预约页面，绕过认证服务...")
             driver.get("https://www.usvisascheduling.com/zh-CN/schedule/")
-            time.sleep(3)
+            try:
+                WebDriverWait(driver, 15).until(lambda d: any(
+                    kw in d.current_url.lower()
+                    for kw in ("usvisascheduling.com/zh-cn/schedule", "login", "b2clogin", "microsoftonline")
+                ))
+            except TimeoutException:
+                pass
             if not _is_login_page(driver):
                 logged_in = True
                 break
