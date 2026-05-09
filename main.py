@@ -164,8 +164,8 @@ def main():
         current_dates = set()
         
         # 动态等待配置
-        SHORT_WAIT_MIN, SHORT_WAIT_MAX = 3, 5
-        LONG_REST_MIN, LONG_REST_MAX = 7, 9
+        SHORT_WAIT_MIN, SHORT_WAIT_MAX = 2, 8
+        LONG_REST_MIN, LONG_REST_MAX = 15, 30
         CHECKS_BEFORE_LONG_REST = random.randint(4, 7)
         check_counter = 0
         last_status_email_time = time.time()

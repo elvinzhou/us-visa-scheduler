@@ -85,7 +85,7 @@ tmux attach -t visa
 2. Enters a monitor loop: refreshes the page, selects the target consulate, reads available dates from the calendar.
 3. Compares with the previous snapshot; sends an email if anything changed.
 4. If auto-booking is enabled and a date falls within your configured range, it clicks through the booking flow automatically.
-5. Waits a randomized interval (3–9 min) before repeating.
+5. Waits a randomized interval (2–8 min normally, 15–30 min for occasional longer rests) before repeating.
 6. If session expiry is detected (redirected to login), prompts for re-login instead of silently retrying.
 
 ## Email Example
