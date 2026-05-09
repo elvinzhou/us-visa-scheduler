@@ -218,9 +218,11 @@ def main():
                 print("领事馆选择成功，等待日历加载...")
                 available_dates = set()
                 try:
-                    # #datepicker-message is injected into the DOM (possibly empty)
-                    # once loading finishes — use presence, not visibility.
-                    wait.until(EC.presence_of_element_located((By.ID, "datepicker-message")))
+                    # Wait until loading is truly done: either the no-availability
+                    # error row appears, or at least one green day cell is present.
+                    wait.until(lambda d: (
+                        d.find_elements(By.ID, "error_row") and d.find_element(By.ID, "error_row").is_displayed()
+                    ) or d.find_elements(By.CSS_SELECTOR, "td[data-handler='selectDay'].greenday"))
 
                     error_rows = driver.find_elements(By.ID, "error_row")
                     if error_rows and error_rows[0].is_displayed():
