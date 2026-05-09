@@ -79,6 +79,12 @@ def send_booking_confirmation_email(booked_date, booked_time):
         body += "\n脚本已执行完毕，浏览器保持打开状态供您检查。"
     _send_email(subject, body)
 
+def send_relogin_email():
+    _send_email(
+        f"【签证监控】{LOCATION_NAME} 会话已过期，请重新登录",
+        f"领事馆: {LOCATION_NAME}\n\n监控脚本检测到登录会话已过期，已暂停监控。\n请重新登录预约系统并在终端按 Enter 键继续。",
+    )
+
 def _send_email(subject, body):
     try:
         msg = MIMEText(body, "plain", "utf-8")
@@ -256,6 +262,7 @@ def main():
                 traceback.print_exc()
                 if "usvisascheduling.com" not in driver.current_url or "login" in driver.current_url.lower():
                     print("检测到会话已过期或被重定向至登录页面，请重新手动登录后按 Enter 继续...")
+                    send_relogin_email()
                     input()
                 else:
                     print("将等待1分钟后重试。")
