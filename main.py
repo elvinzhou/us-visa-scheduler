@@ -92,20 +92,25 @@ def send_status_email(check_count):
     )
 
 def _send_email(subject, body):
-    try:
-        msg = MIMEText(body, "plain", "utf-8")
-        msg["From"] = formataddr((f"{LOCATION_NAME}签证监控", EMAIL_SENDER))
-        msg["To"] = ", ".join(EMAIL_RECEIVERS)
-        msg["Subject"] = Header(subject, 'utf-8')
-        print("正在连接邮件服务器...")
-        server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
-        server.login(EMAIL_SENDER, EMAIL_PASSWORD)
-        print("邮件服务器登录成功，正在发送邮件...")
-        server.sendmail(EMAIL_SENDER, EMAIL_RECEIVERS, msg.as_string())
-        server.quit()
-        print(f"邮件已成功发送至 {', '.join(EMAIL_RECEIVERS)}")
-    except Exception as e:
-        print(f"邮件发送失败，错误: {e}")
+    msg = MIMEText(body, "plain", "utf-8")
+    msg["From"] = formataddr((f"{LOCATION_NAME}签证监控", EMAIL_SENDER))
+    msg["To"] = ", ".join(EMAIL_RECEIVERS)
+    msg["Subject"] = Header(subject, 'utf-8')
+    for attempt in range(1, 4):
+        try:
+            print(f"正在连接邮件服务器 (第 {attempt} 次)...")
+            server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
+            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            print("邮件服务器登录成功，正在发送邮件...")
+            server.sendmail(EMAIL_SENDER, EMAIL_RECEIVERS, msg.as_string())
+            server.quit()
+            print(f"邮件已成功发送至 {', '.join(EMAIL_RECEIVERS)}")
+            return
+        except Exception as e:
+            print(f"邮件发送失败 (第 {attempt} 次)，错误: {e}")
+            if attempt < 3:
+                time.sleep(5 * attempt)
+    print("邮件发送最终失败，已跳过。")
 
 def countdown_timer(total_seconds):
     """在终端显示倒计时，单行刷新直到结束。"""
@@ -283,10 +288,24 @@ def main():
                         print(f"常规等待 {wait_minutes} 分钟...")
                         countdown_timer(wait_minutes * 60)
 
+            except UnexpectedAlertPresentException as e:
+                # Dismiss the alert before touching driver.current_url, which
+                # would itself raise if the alert is still open.
+                print(f"本轮检查出现错误: {e}")
+                try:
+                    driver.switch_to.alert.dismiss()
+                    print("弹窗已关闭，等待1分钟后重试。")
+                except Exception:
+                    pass
+                countdown_timer(60)
             except Exception as e:
                 print(f"本轮检查出现错误: {e}")
                 traceback.print_exc()
-                if "usvisascheduling.com" not in driver.current_url or "login" in driver.current_url.lower():
+                try:
+                    current_url = driver.current_url
+                except Exception:
+                    current_url = ""
+                if "usvisascheduling.com" not in current_url or "login" in current_url.lower():
                     print("检测到会话已过期或被重定向至登录页面，请重新手动登录后按 Enter 继续...")
                     send_relogin_email()
                     input()
