@@ -497,6 +497,8 @@ def main():
                     if not do_login(driver):
                         countdown_timer(5 * 60)
                         continue
+                    # Login redirects to the landing page; navigate to the schedule page.
+                    driver.get("https://www.usvisascheduling.com/zh-CN/schedule/")
 
                 # 3. Inject API hook
                 inject_api_hook(driver)
