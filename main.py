@@ -10,6 +10,7 @@ import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 import time
 import smtplib
 from email.mime.text import MIMEText
@@ -157,19 +158,21 @@ def main():
                 select.select_by_value(LOCATION_VALUE_ID)
                 
                 print("领事馆选择成功，等待日历加载...")
-                wait.until(EC.visibility_of_element_located((By.ID, "datepicker-message")))
-                print("日历加载完成！")
-
                 available_dates = set()
-                day_cells = driver.find_elements(By.CSS_SELECTOR, "td[data-handler='selectDay'].greenday")
-                for cell in day_cells:
-                    try:
-                        day = cell.find_element(By.CSS_SELECTOR, "a.ui-state-default").text
-                        month = int(cell.get_attribute("data-month")) + 1
-                        year = int(cell.get_attribute("data-year"))
-                        available_dates.add(date(year, month, int(day)).isoformat())
-                    except Exception as e:
-                        print(f"解析日期单元格时出错: {e}")
+                try:
+                    wait.until(EC.visibility_of_element_located((By.ID, "datepicker-message")))
+                    print("日历加载完成！")
+                    day_cells = driver.find_elements(By.CSS_SELECTOR, "td[data-handler='selectDay'].greenday")
+                    for cell in day_cells:
+                        try:
+                            day = cell.find_element(By.CSS_SELECTOR, "a.ui-state-default").text
+                            month = int(cell.get_attribute("data-month")) + 1
+                            year = int(cell.get_attribute("data-year"))
+                            available_dates.add(date(year, month, int(day)).isoformat())
+                        except Exception as e:
+                            print(f"解析日期单元格时出错: {e}")
+                except TimeoutException:
+                    print("日历未出现，当前暂无可用日期。")
 
                 if available_dates != current_dates:
                     print("---!!! 日期有变动 !!! ---")
