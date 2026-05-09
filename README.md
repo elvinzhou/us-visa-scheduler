@@ -47,20 +47,16 @@ EMAIL_RECEIVER=receiver1@example.com,receiver2@example.com
 # Optional — defaults shown
 # SMTP_SERVER=smtp.qq.com
 # SMTP_PORT=465
-```
 
-To change the consulate or auto-booking settings, edit the top of `main.py`:
+# Consulate to monitor: SHANGHAI / WUHAN / SHENYANG (default: SHENYANG)
+# LOCATION_NAME=SHENYANG
 
-```python
-LOCATION_NAME = "SHENYANG"  # "SHANGHAI" / "WUHAN" / "SHENYANG"
-
-BOOKING_CONFIG = {
-    "BOOKING_ENABLED": False,
-    "EARLIEST_DATE_STR": "2025-08-01",
-    "LATEST_DATE_STR": "2025-08-31",
-    "DRY_RUN": True,              # True = preview only, False = submit
-    "KEEP_BROWSER_OPEN_ON_EXIT": True
-}
+# Auto-booking settings (all optional — defaults shown)
+# BOOKING_ENABLED=false         # set to "true" to enable auto-booking
+# EARLIEST_DATE_STR=2025-08-01  # earliest acceptable appointment date
+# LATEST_DATE_STR=2025-08-31    # latest acceptable appointment date
+# DRY_RUN=true                  # "false" to actually submit; "true" for preview only
+# KEEP_BROWSER_OPEN_ON_EXIT=true
 ```
 
 ## Step 3 — Run the scheduler

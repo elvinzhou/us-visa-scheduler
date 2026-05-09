@@ -47,20 +47,16 @@ EMAIL_RECEIVER=receiver1@example.com,receiver2@example.com
 # 可选 — 以下为默认值
 # SMTP_SERVER=smtp.qq.com
 # SMTP_PORT=465
-```
 
-如需修改领事馆或自动预定设置，编辑 `main.py` 顶部：
+# 监控的领事馆：SHANGHAI / WUHAN / SHENYANG（默认：SHENYANG）
+# LOCATION_NAME=SHENYANG
 
-```python
-LOCATION_NAME = "SHENYANG"  # "SHANGHAI" / "WUHAN" / "SHENYANG"
-
-BOOKING_CONFIG = {
-    "BOOKING_ENABLED": False,
-    "EARLIEST_DATE_STR": "2025-08-01",
-    "LATEST_DATE_STR": "2025-08-31",
-    "DRY_RUN": True,              # True = 仅模拟，False = 真正提交
-    "KEEP_BROWSER_OPEN_ON_EXIT": True
-}
+# 自动预定设置（均为可选，以下为默认值）
+# BOOKING_ENABLED=false         # 设为 "true" 以启用自动预定
+# EARLIEST_DATE_STR=2025-08-01  # 可接受的最早预约日期
+# LATEST_DATE_STR=2025-08-31    # 可接受的最晚预约日期
+# DRY_RUN=true                  # "false" 表示真实提交；"true" 表示仅模拟
+# KEEP_BROWSER_OPEN_ON_EXIT=true
 ```
 
 ## 第三步 — 运行监控脚本
