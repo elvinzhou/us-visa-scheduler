@@ -134,6 +134,22 @@ def send_notification_email(added_dates, removed_dates, all_dates):
             body_lines.append(f"  ❌ {d}")
     body_lines.append("\n\n当前所有可预约日期:")
     body_lines.append("\n".join([f"  - {d}" for d in sorted(all_dates)]) if all_dates else "  (暂无可用日期)")
+
+    if BOOKING_CONFIG["BOOKING_ENABLED"] and added_dates:
+        earliest = BOOKING_CONFIG["EARLIEST_DATE_STR"]
+        latest = BOOKING_CONFIG["LATEST_DATE_STR"]
+        in_range = sorted([d for d in added_dates if earliest <= d <= latest])
+        if in_range:
+            mode = "模拟预定 (Dry Run)" if BOOKING_CONFIG["DRY_RUN"] else "真实预定"
+            body_lines.append(f"\n\n⚡ 自动预定已启用 ({mode})")
+            body_lines.append(f"正在尝试预定: {in_range[0]}")
+            body_lines.append("请等待预定确认邮件，无需手动操作。")
+        else:
+            body_lines.append(f"\n\n自动预定已启用，但新增日期不在设定范围 ({earliest} 至 {latest}) 内，未触发预定。")
+            body_lines.append("如需手动预约，请访问: https://www.usvisascheduling.com/zh-CN/schedule/")
+    else:
+        body_lines.append("\n\n请尽快手动前往预约: https://www.usvisascheduling.com/zh-CN/schedule/")
+
     _send_email(subject, "\n".join(body_lines))
 
 def send_booking_confirmation_email(booked_date, booked_time):
