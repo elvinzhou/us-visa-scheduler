@@ -4,7 +4,7 @@
 
 Automatically monitors available U.S. visa appointment dates on [usvisascheduling.com](https://www.usvisascheduling.com), with email alerts and optional auto-booking.
 
-The login step requires completing a CAPTCHA manually, so the script needs a visible browser. Run it on a machine where you can see a screen: WSL2 on Windows, a Raspberry Pi, or any Ubuntu desktop/server with a display.
+Login and CAPTCHA solving are fully automated — the script uses your credentials and OpenAI's GPT-4o-mini to handle the login flow. A visible browser is still required so the site doesn't detect headless automation. Run it on a machine with a display: WSL2 on Windows, a Raspberry Pi, or any Ubuntu desktop/server.
 
 ## Prerequisites
 
@@ -39,6 +39,18 @@ nano .env
 # Applicant name exactly as shown on the scheduling page
 APPLICANT_NAME=Your Full Name
 
+# Visa site credentials
+VISA_USERNAME=your_visa_site_email
+VISA_PASSWORD=your_visa_site_password
+
+# Security question answers (optional — only needed if your account uses them)
+# SECURITY_A1=your_answer_1
+# SECURITY_A2=your_answer_2
+# SECURITY_A3=your_answer_3
+
+# OpenAI API key — used to solve the login CAPTCHA automatically
+OPENAI_API_KEY=sk-...
+
 # Email notifications — supports multiple comma-separated receivers
 EMAIL_SENDER=your_email@qq.com
 EMAIL_PASSWORD=your_smtp_app_password
@@ -47,20 +59,16 @@ EMAIL_RECEIVER=receiver1@example.com,receiver2@example.com
 # Optional — defaults shown
 # SMTP_SERVER=smtp.qq.com
 # SMTP_PORT=465
-```
 
-To change the consulate or auto-booking settings, edit the top of `main.py`:
+# Consulate to monitor: SHANGHAI / WUHAN / SHENYANG (default: SHENYANG)
+# LOCATION_NAME=SHENYANG
 
-```python
-LOCATION_NAME = "SHENYANG"  # "SHANGHAI" / "WUHAN" / "SHENYANG"
-
-BOOKING_CONFIG = {
-    "BOOKING_ENABLED": False,
-    "EARLIEST_DATE_STR": "2025-08-01",
-    "LATEST_DATE_STR": "2025-08-31",
-    "DRY_RUN": True,              # True = preview only, False = submit
-    "KEEP_BROWSER_OPEN_ON_EXIT": True
-}
+# Auto-booking settings (all optional — defaults shown)
+# BOOKING_ENABLED=false         # set to "true" to enable auto-booking
+# EARLIEST_DATE_STR=2025-08-01  # earliest acceptable appointment date
+# LATEST_DATE_STR=2025-08-31    # latest acceptable appointment date
+# DRY_RUN=true                  # "false" to actually submit; "true" for preview only
+# KEEP_BROWSER_OPEN_ON_EXIT=true
 ```
 
 ## Step 3 — Run the scheduler
@@ -71,7 +79,7 @@ source .venv/bin/activate
 python3 main.py
 ```
 
-A Chrome window will open on your screen. Log in manually and complete the CAPTCHA, then press **Enter** in the terminal. The script takes over and monitors in a loop.
+A Chrome window will open on your screen. The script automatically logs in and solves the CAPTCHA, then enters the monitoring loop.
 
 Detach tmux with **Ctrl+B D** — the scheduler keeps running in the background. To reattach later:
 
@@ -81,12 +89,12 @@ tmux attach -t visa
 
 ## How It Works
 
-1. Opens the scheduling site; you log in manually.
-2. Enters a monitor loop: refreshes the page, selects the target consulate, reads available dates from the calendar.
+1. Opens the scheduling site and automatically logs in, solving the CAPTCHA via GPT-4o-mini.
+2. Enters a monitor loop: refreshes the page, selects the target consulate, reads available dates via an intercepted API response (falls back to DOM scraping on timeout).
 3. Compares with the previous snapshot; sends an email if anything changed.
 4. If auto-booking is enabled and a date falls within your configured range, it clicks through the booking flow automatically.
 5. Waits a randomized interval (3–5 min normally, 7–9 min for occasional longer rests) before repeating.
-6. If session expiry is detected (redirected to login), prompts for re-login instead of silently retrying.
+6. If session expiry is detected (redirected to login), automatically re-logs in instead of silently retrying.
 
 ## Email Example
 
@@ -110,7 +118,7 @@ Subject: 【签证监控】SHENYANG F1签证日期变动！
 
 - For personal / educational use only.
 - The author(s) are not responsible for any consequences of using this tool.
-- Manual login is required on first run and after session expiry.
+- A visible browser window is required — headless mode is not supported.
 - Stable internet connection recommended.
 
 ## Acknowledgements
