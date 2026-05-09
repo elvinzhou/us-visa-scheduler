@@ -302,6 +302,19 @@ def do_login(driver):
     # Stage 1: credentials + captcha
     logged_in = False
     for attempt in range(MAX_RETRIES):
+        # On the 3rd attempt the auth service may be having a transient error.
+        # Try navigating straight to the schedule page — if the session cookie is
+        # still valid we land there directly; if not, we get redirected to login
+        # and fall through to the normal credential flow on subsequent attempts.
+        if attempt == 2:
+            print("第3次尝试：直接导航至预约页面，绕过认证服务...")
+            driver.get("https://www.usvisascheduling.com/zh-CN/schedule/")
+            time.sleep(3)
+            if not _is_login_page(driver):
+                logged_in = True
+                break
+            print("直接导航后仍在登录页面，继续尝试凭据登录...")
+
         try:
             username_field = WebDriverWait(driver, 15).until(
                 EC.presence_of_element_located((By.ID, "signInName"))
