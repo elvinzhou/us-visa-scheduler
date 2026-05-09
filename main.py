@@ -172,6 +172,8 @@ def main():
                         except Exception as e:
                             print(f"解析日期单元格时出错: {e}")
                 except TimeoutException:
+                    if "usvisascheduling.com" not in driver.current_url or "login" in driver.current_url.lower():
+                        raise
                     print("日历未出现，当前暂无可用日期。")
 
                 if available_dates != current_dates:
