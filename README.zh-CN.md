@@ -4,17 +4,14 @@
 
 自动监控 [usvisascheduling.com](https://www.usvisascheduling.com) 上的美国签证可预约日期，支持邮件提醒和自动预定。
 
-登录步骤需要手动完成验证码，因此脚本需要一个可视化浏览器。以下部署方案在云服务器上运行，通过浏览器访问桌面——无需安装 VNC 客户端或在本地运行。
+登录步骤需要手动完成验证码，因此脚本需要一个可见的浏览器界面。请在有显示器的本地机器上运行：Windows 的 WSL2、树莓派，或任意带显示输出的 Ubuntu 系统。
 
 ## 前提条件
 
-- 一台运行 Ubuntu 22.04、内存至少 1 GB 的云服务器（任意服务商均可，如 AWS Lightsail、Oracle Cloud 等）
-- 在服务商防火墙中开放 6080 端口（用于桌面访问）
-- 可以 SSH 登录到该服务器
+- WSL2（Windows 11 with WSLg）、Raspberry Pi OS，或 Ubuntu 22.04+
+- 已安装 Git
 
-## 第一步 — 初始化服务器
-
-SSH 登录服务器，克隆仓库，运行初始化脚本：
+## 第一步 — 克隆仓库并初始化
 
 ```bash
 git clone https://github.com/elvinzhou/us-visa-scheduler.git
@@ -22,42 +19,14 @@ cd us-visa-scheduler
 chmod +x setup.sh && ./setup.sh
 ```
 
-脚本会提示设置 VNC 密码，然后自动安装以下内容：
-- Xfce 桌面 + TigerVNC（仅监听本地）
-- noVNC — 通过 6080 端口在浏览器中访问桌面
-- Google Chrome
+脚本将自动安装以下内容：
+- Google Chrome（x86-64）或 Chromium（ARM / 树莓派）
 - Python 虚拟环境及所有依赖
-- systemd 服务（重启服务器后自动恢复运行）
+- tmux
 
-## 第二步 — 开放 6080 端口
+> **WSL 说明：** 浏览器窗口需要 WSLg（Windows 11 版本 22000 及以上）才能正常显示。如果使用 Windows 10 WSL2，请先安装 X 服务端（如 [VcXsrv](https://sourceforge.net/projects/vcxsrv/)），然后在运行脚本前执行 `export DISPLAY=:0`。
 
-在服务商的防火墙/安全组中，添加一条允许 TCP 6080 端口入站的规则。建议将来源限制为你自己的 IP 以提高安全性。
-
-## 第三步 — 配置 Cloudflare WARP（推荐）
-
-该网站会屏蔽数据中心的 IP 段。WARP 以代理模式运行，将 Chrome 流量通过 Cloudflare 网络转发，同时不影响 SSH 连接：
-
-```bash
-curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg \
-    | sudo gpg --dearmor -o /usr/share/keyrings/cloudflare-warp.gpg
-echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp.gpg] \
-https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" \
-    | sudo tee /etc/apt/sources.list.d/cloudflare-warp.list
-sudo apt-get update && sudo apt-get install -y cloudflare-warp
-warp-cli register
-warp-cli mode proxy
-warp-cli connect
-```
-
-验证是否正常工作——以下命令应返回一个 Cloudflare IP：
-
-```bash
-curl --proxy socks5://127.0.0.1:40000 ifconfig.me
-```
-
-脚本中的 Chrome 已配置为自动使用 WARP 代理（端口 40000）。
-
-## 第四步 — 配置
+## 第二步 — 配置
 
 将 `.env.example` 复制为 `.env` 并填写你的信息：
 
@@ -94,24 +63,17 @@ BOOKING_CONFIG = {
 }
 ```
 
-## 第五步 — 访问桌面
-
-在浏览器中打开 `http://<服务器公网IP>:6080/vnc.html`，输入 VNC 密码，即可在浏览器标签页中看到完整桌面。
-
-## 第六步 — 运行监控脚本
-
-在桌面内打开终端：
+## 第三步 — 运行监控脚本
 
 ```bash
-cd us-visa-scheduler
 tmux new -s visa
 source .venv/bin/activate
 python3 main.py
 ```
 
-Chrome 窗口会自动打开，手动完成登录和验证码，然后在终端按 **Enter**。脚本将接管后续的循环监控。
+Chrome 窗口会在你的屏幕上打开，手动完成登录和验证码，然后在终端按 **Enter**。脚本将接管后续的循环监控。
 
-使用 **Ctrl+B D** 分离 tmux 并关闭浏览器标签页——脚本在后台持续运行。之后如需重新查看：
+使用 **Ctrl+B D** 分离 tmux——脚本在后台持续运行。之后如需重新查看：
 
 ```bash
 tmux attach -t visa

@@ -4,17 +4,14 @@
 
 Automatically monitors available U.S. visa appointment dates on [usvisascheduling.com](https://www.usvisascheduling.com), with email alerts and optional auto-booking.
 
-The login step requires completing a CAPTCHA manually, so the script needs a visible browser. The setup below runs it on a cloud VM with a browser-accessible desktop — no VNC client or local install needed.
+The login step requires completing a CAPTCHA manually, so the script needs a visible browser. Run it on a machine where you can see a screen: WSL2 on Windows, a Raspberry Pi, or any Ubuntu desktop/server with a display.
 
 ## Prerequisites
 
-- A Ubuntu 22.04 VM with at least 1 GB RAM (any provider — AWS Lightsail, Oracle Cloud, etc.)
-- Port 6080 open in your provider's firewall for the desktop
-- SSH access to the VM
+- WSL2 (Windows 11 with WSLg), Raspberry Pi OS, or Ubuntu 22.04+
+- Git installed
 
-## Step 1 — Bootstrap the VM
-
-SSH into your VM, clone the repo, and run the setup script:
+## Step 1 — Clone and bootstrap
 
 ```bash
 git clone https://github.com/elvinzhou/us-visa-scheduler.git
@@ -22,42 +19,14 @@ cd us-visa-scheduler
 chmod +x setup.sh && ./setup.sh
 ```
 
-The script prompts for a VNC password then automatically installs:
-- Xfce desktop + TigerVNC (localhost only)
-- noVNC — browser-accessible desktop on port 6080
-- Google Chrome
+The script installs:
+- Google Chrome (x86-64) or Chromium (ARM / Raspberry Pi)
 - Python venv with all dependencies
-- systemd services so everything restarts on reboot
+- tmux
 
-## Step 2 — Open port 6080
+> **WSL note:** WSLg (Windows 11 build 22000+) is required for the browser window to appear. On Windows 10 WSL2 install an X server such as [VcXsrv](https://sourceforge.net/projects/vcxsrv/) and run `export DISPLAY=:0` before starting the script.
 
-In your provider's firewall/security group, add an inbound TCP rule for port 6080. Restrict the source to your IP for better security.
-
-## Step 3 — Set up Cloudflare WARP (recommended)
-
-The site blocks datacenter IP ranges. WARP routes Chrome traffic through Cloudflare's network to avoid this. Install and enable it in proxy mode so SSH is unaffected:
-
-```bash
-curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg \
-    | sudo gpg --dearmor -o /usr/share/keyrings/cloudflare-warp.gpg
-echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp.gpg] \
-https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" \
-    | sudo tee /etc/apt/sources.list.d/cloudflare-warp.list
-sudo apt-get update && sudo apt-get install -y cloudflare-warp
-warp-cli register
-warp-cli mode proxy
-warp-cli connect
-```
-
-Verify it's working — this should return a Cloudflare IP:
-
-```bash
-curl --proxy socks5://127.0.0.1:40000 ifconfig.me
-```
-
-Chrome is already configured to use the WARP proxy (port 40000) in the script.
-
-## Step 4 — Configure
+## Step 2 — Configure
 
 Copy `.env.example` to `.env` and fill in your values:
 
@@ -94,24 +63,17 @@ BOOKING_CONFIG = {
 }
 ```
 
-## Step 5 — Access the desktop
-
-Open `http://<your-vm-ip>:6080/vnc.html` in a browser and enter your VNC password. You'll see a full desktop in the tab.
-
-## Step 6 — Run the scheduler
-
-In a terminal inside the desktop:
+## Step 3 — Run the scheduler
 
 ```bash
-cd us-visa-scheduler
 tmux new -s visa
 source .venv/bin/activate
 python3 main.py
 ```
 
-A Chrome window will open. Log in manually and complete the CAPTCHA, then press **Enter** in the terminal. The script takes over and monitors in a loop.
+A Chrome window will open on your screen. Log in manually and complete the CAPTCHA, then press **Enter** in the terminal. The script takes over and monitors in a loop.
 
-Detach tmux with **Ctrl+B D** and close the browser tab — the scheduler keeps running in the background. To reattach later:
+Detach tmux with **Ctrl+B D** — the scheduler keeps running in the background. To reattach later:
 
 ```bash
 tmux attach -t visa
