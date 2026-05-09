@@ -157,7 +157,7 @@ def main():
                 select.select_by_value(LOCATION_VALUE_ID)
                 
                 print("领事馆选择成功，等待日历加载...")
-                wait.until(EC.text_to_be_present_in_element((By.ID, "datepicker-message"), "选择日期"))
+                wait.until(EC.visibility_of_element_located((By.ID, "datepicker-message")))
                 print("日历加载完成！")
 
                 available_dates = set()
