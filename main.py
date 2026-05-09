@@ -218,17 +218,12 @@ def main():
                 print("领事馆选择成功，等待日历加载...")
                 available_dates = set()
                 try:
-                    # Wait until loading finishes: either the calendar appears or
-                    # the "无可用时段" error row becomes visible.
-                    wait.until(lambda d: (
-                        d.find_element(By.ID, "datepicker-message").is_displayed()
-                        if d.find_elements(By.ID, "datepicker-message") else False
-                    ) or (
-                        d.find_element(By.ID, "error_row").is_displayed()
-                        if d.find_elements(By.ID, "error_row") else False
-                    ))
+                    # #datepicker-message is injected into the DOM (possibly empty)
+                    # once loading finishes — use presence, not visibility.
+                    wait.until(EC.presence_of_element_located((By.ID, "datepicker-message")))
 
-                    if driver.find_elements(By.ID, "error_row") and driver.find_element(By.ID, "error_row").is_displayed():
+                    error_rows = driver.find_elements(By.ID, "error_row")
+                    if error_rows and error_rows[0].is_displayed():
                         print("日历已加载，当前无可用时段。")
                     else:
                         print("日历加载完成！")
