@@ -85,6 +85,12 @@ def send_relogin_email():
         f"领事馆: {LOCATION_NAME}\n\n监控脚本检测到登录会话已过期，已暂停监控。\n请重新登录预约系统并在终端按 Enter 键继续。",
     )
 
+def send_status_email(check_count):
+    _send_email(
+        f"【签证监控】{LOCATION_NAME} 运行正常，暂无可用日期",
+        f"领事馆: {LOCATION_NAME}\n\n监控脚本运行正常，过去6小时内共检查 {check_count} 次，暂未发现可用日期。",
+    )
+
 def _send_email(subject, body):
     try:
         msg = MIMEText(body, "plain", "utf-8")
@@ -129,6 +135,8 @@ def main():
         LONG_REST_MIN, LONG_REST_MAX = 7, 9
         CHECKS_BEFORE_LONG_REST = random.randint(4, 7)
         check_counter = 0
+        last_status_email_time = time.time()
+        checks_since_last_status = 0
 
         # 1. 手动登录
         driver.get("https://www.usvisascheduling.com/zh-CN/schedule/")
@@ -245,6 +253,13 @@ def main():
                         break
 
                 check_counter += 1
+                checks_since_last_status += 1
+
+                if not current_dates and time.time() - last_status_email_time >= 6 * 3600:
+                    send_status_email(checks_since_last_status)
+                    last_status_email_time = time.time()
+                    checks_since_last_status = 0
+
                 if not booking_completed_successfully:
                     print(f"\n--- 本轮检查完成 (第 {check_counter} 次) ---")
                     if check_counter % CHECKS_BEFORE_LONG_REST == 0:
