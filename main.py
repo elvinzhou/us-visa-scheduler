@@ -218,21 +218,32 @@ def main():
                 print("领事馆选择成功，等待日历加载...")
                 available_dates = set()
                 try:
-                    wait.until(EC.visibility_of_element_located((By.ID, "datepicker-message")))
-                    print("日历加载完成！")
-                    day_cells = driver.find_elements(By.CSS_SELECTOR, "td[data-handler='selectDay'].greenday")
-                    for cell in day_cells:
-                        try:
-                            day = cell.find_element(By.CSS_SELECTOR, "a.ui-state-default").text
-                            month = int(cell.get_attribute("data-month")) + 1
-                            year = int(cell.get_attribute("data-year"))
-                            available_dates.add(date(year, month, int(day)).isoformat())
-                        except Exception as e:
-                            print(f"解析日期单元格时出错: {e}")
+                    # Wait for "正在加载" to disappear from the page before reading results.
+                    wait.until(lambda d: "正在加载" not in d.find_element(By.TAG_NAME, "body").text)
+                    print("加载完成，正在读取结果...")
+
+                    error_rows = driver.find_elements(By.ID, "error_row")
+                    if error_rows and error_rows[0].is_displayed():
+                        error_text = error_rows[0].text.strip()
+                        if "无可用时段" in error_text:
+                            print("当前无可用时段。")
+                        else:
+                            print(f"页面返回错误: {error_text}")
+                    else:
+                        day_cells = driver.find_elements(By.CSS_SELECTOR, "td[data-handler='selectDay'].greenday")
+                        print(f"日历加载完成，发现 {len(day_cells)} 个可用日期。")
+                        for cell in day_cells:
+                            try:
+                                day = cell.find_element(By.CSS_SELECTOR, "a.ui-state-default").text
+                                month = int(cell.get_attribute("data-month")) + 1
+                                year = int(cell.get_attribute("data-year"))
+                                available_dates.add(date(year, month, int(day)).isoformat())
+                            except Exception as e:
+                                print(f"解析日期单元格时出错: {e}")
                 except TimeoutException:
                     if "usvisascheduling.com" not in driver.current_url or "login" in driver.current_url.lower():
                         raise
-                    print("日历未出现，当前暂无可用日期。")
+                    print("等待加载超时，跳过本轮。")
 
                 if available_dates != current_dates:
                     print("---!!! 日期有变动 !!! ---")
