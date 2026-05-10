@@ -268,7 +268,7 @@ def _solve_captcha(driver):
     seen_srcs = set()
     for attempt in range(MAX_RETRIES):
         try:
-            img = WebDriverWait(driver, 10).until(
+            img = WebDriverWait(driver, 45).until(
                 EC.presence_of_element_located((By.ID, "captchaImage"))
             )
             src = img.get_attribute("src") or ""
@@ -322,7 +322,7 @@ def do_login(driver):
             print("直接导航后仍在登录页面，继续尝试凭据登录...")
 
         try:
-            username_field = WebDriverWait(driver, 15).until(
+            username_field = WebDriverWait(driver, 45).until(
                 EC.presence_of_element_located((By.ID, "signInName"))
             )
             username_field.clear()
