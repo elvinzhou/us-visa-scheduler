@@ -495,10 +495,22 @@ def main():
         while True:
             try:
                 print(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] 开始新一轮检查...")
+
+                # Dismiss any alert already present before refreshing — an
+                # unhandled alert causes driver.refresh() to throw WebDriverException.
+                try:
+                    alert = driver.switch_to.alert
+                    print(f"检测到弹窗(刷新前): \"{alert.text}\"，已自动关闭。")
+                    alert.dismiss()
+                    countdown_timer(60)
+                    continue
+                except Exception:
+                    pass
+
                 driver.refresh()
                 print("页面已刷新，等待页面加载...")
 
-                # Dismiss JS alert
+                # Dismiss JS alert that appeared during/after the refresh
                 try:
                     alert = WebDriverWait(driver, 5).until(EC.alert_is_present())
                     print(f"检测到弹窗: \"{alert.text}\"，已自动关闭。")
