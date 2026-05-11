@@ -242,7 +242,7 @@ def _is_cloudflare_page(driver):
         return False
 
 def _navigate(driver, url):
-    """Navigate to url, retrying indefinitely with exponential backoff (30s up to 16min)."""
+    """Navigate to url, retrying indefinitely with exponential backoff starting at 30s."""
     delay = 30
     attempt = 0
     while True:
@@ -255,7 +255,7 @@ def _navigate(driver, url):
         except Exception as e:
             print(f"页面加载失败 (第{attempt}次): {e}\n等待{delay}秒后重试...")
             time.sleep(delay)
-            delay = min(delay * 2, 16 * 60)
+            delay *= 2
 
 
 def countdown_timer(total_seconds):
@@ -522,7 +522,6 @@ def main():
         _navigate(driver, "https://www.usvisascheduling.com/zh-CN/schedule/")
 
         server_backoff = 60
-        MAX_SERVER_BACKOFF = 16 * 60
 
         while True:
             try:
@@ -683,7 +682,7 @@ def main():
                 elif _is_transient_error(e) or _is_cloudflare_page(driver):
                     print(f"检测到服务器临时错误，等待 {server_backoff // 60} 分{server_backoff % 60:02d}秒后重试...")
                     countdown_timer(server_backoff)
-                    server_backoff = min(server_backoff * 2, MAX_SERVER_BACKOFF)
+                    server_backoff *= 2
                 else:
                     server_backoff = 60
                     print("将等待1分钟后重试。")
