@@ -241,18 +241,18 @@ def _is_cloudflare_page(driver):
     except Exception:
         return False
 
-def _navigate(driver, url, max_attempts=5):
-    """Navigate to url, retrying with exponential backoff on transient failures."""
+def _navigate(driver, url):
+    """Navigate to url, retrying indefinitely with exponential backoff (30s up to 16min)."""
     delay = 30
-    for attempt in range(1, max_attempts + 1):
+    attempt = 0
+    while True:
+        attempt += 1
         try:
             driver.get(url)
             if _is_cloudflare_page(driver):
                 raise WebDriverException("Cloudflare challenge page detected")
             return
         except Exception as e:
-            if attempt == max_attempts:
-                raise
             print(f"页面加载失败 (第{attempt}次): {e}\n等待{delay}秒后重试...")
             time.sleep(delay)
             delay = min(delay * 2, 16 * 60)
