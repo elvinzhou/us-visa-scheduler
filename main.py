@@ -229,6 +229,35 @@ def _send_email(subject, body):
     print("邮件发送最终失败，已跳过。")
 
 
+_TRANSIENT_KEYWORDS = ("timed out", "timeout", "connection", "cloudflare", "aborted", "not attached", "read timed out")
+
+def _is_transient_error(exc):
+    return any(kw in str(exc).lower() for kw in _TRANSIENT_KEYWORDS)
+
+def _is_cloudflare_page(driver):
+    try:
+        title = driver.title.lower()
+        return "just a moment" in title or "cloudflare" in title
+    except Exception:
+        return False
+
+def _navigate(driver, url, max_attempts=5):
+    """Navigate to url, retrying with exponential backoff on transient failures."""
+    delay = 30
+    for attempt in range(1, max_attempts + 1):
+        try:
+            driver.get(url)
+            if _is_cloudflare_page(driver):
+                raise WebDriverException("Cloudflare challenge page detected")
+            return
+        except Exception as e:
+            if attempt == max_attempts:
+                raise
+            print(f"页面加载失败 (第{attempt}次): {e}\n等待{delay}秒后重试...")
+            time.sleep(delay)
+            delay = min(delay * 2, 16 * 60)
+
+
 def countdown_timer(total_seconds):
     print()
     while total_seconds > 0:
@@ -490,7 +519,10 @@ def main():
             print(f"模式: {'安全模式 (Dry Run)' if BOOKING_CONFIG['DRY_RUN'] else '真实预定模式'}")
             print("------------------------\n")
 
-        driver.get("https://www.usvisascheduling.com/zh-CN/schedule/")
+        _navigate(driver, "https://www.usvisascheduling.com/zh-CN/schedule/")
+
+        server_backoff = 60
+        MAX_SERVER_BACKOFF = 16 * 60
 
         while True:
             try:
@@ -517,6 +549,8 @@ def main():
 
                 driver.refresh()
                 print("页面已刷新，等待页面加载...")
+                if _is_cloudflare_page(driver):
+                    raise WebDriverException("Cloudflare challenge page detected")
 
                 # Dismiss JS alert that appeared during/after the refresh
                 try:
@@ -537,7 +571,7 @@ def main():
                         countdown_timer(5 * 60)
                         continue
                     # Login redirects to the landing page; navigate to the schedule page.
-                    driver.get("https://www.usvisascheduling.com/zh-CN/schedule/")
+                    _navigate(driver, "https://www.usvisascheduling.com/zh-CN/schedule/")
 
                 # 3. Inject API hook
                 inject_api_hook(driver)
@@ -608,6 +642,7 @@ def main():
                         booking_completed_successfully = True
                         break
 
+                server_backoff = 60  # successful check — reset transient-error backoff
                 checks_since_last_status += 1
 
                 if not current_dates and time.time() - last_status_email_time >= 6 * 3600:
@@ -645,7 +680,12 @@ def main():
                 if "usvisascheduling.com" not in current_url or "login" in current_url.lower():
                     print("检测到会话已过期，尝试重新登录...")
                     countdown_timer(10)
+                elif _is_transient_error(e) or _is_cloudflare_page(driver):
+                    print(f"检测到服务器临时错误，等待 {server_backoff // 60} 分{server_backoff % 60:02d}秒后重试...")
+                    countdown_timer(server_backoff)
+                    server_backoff = min(server_backoff * 2, MAX_SERVER_BACKOFF)
                 else:
+                    server_backoff = 60
                     print("将等待1分钟后重试。")
                     countdown_timer(60)
 
