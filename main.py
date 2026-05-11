@@ -498,14 +498,22 @@ def main():
 
                 # Dismiss any alert already present before refreshing — an
                 # unhandled alert causes driver.refresh() to throw WebDriverException.
+                # alert.dismiss() itself can throw if the page is already navigating,
+                # so wrap it separately and always continue once an alert is detected.
+                alert_present = False
                 try:
                     alert = driver.switch_to.alert
+                    alert_present = True
                     print(f"检测到弹窗(刷新前): \"{alert.text}\"，已自动关闭。")
-                    alert.dismiss()
-                    countdown_timer(60)
-                    continue
+                    try:
+                        alert.dismiss()
+                    except Exception:
+                        pass
                 except Exception:
                     pass
+                if alert_present:
+                    countdown_timer(60)
+                    continue
 
                 driver.refresh()
                 print("页面已刷新，等待页面加载...")
