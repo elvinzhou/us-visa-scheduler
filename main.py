@@ -641,17 +641,21 @@ def main():
                     if not do_login(driver):
                         countdown_timer(5 * 60)
                         continue
-                    # Login redirects to the landing page; navigate to the schedule page.
+
+                # 3. Ensure we're on the schedule page — post-login redirects and
+                #    session restores often land on the /zh-CN/ landing page instead.
+                if "/zh-cn/schedule" not in driver.current_url.lower():
+                    print(f"当前页面不是预约页面 ({driver.current_url})，正在导航...")
                     _navigate(driver, "https://www.usvisascheduling.com/zh-CN/schedule/")
 
-                # 3. Inject API hook
+                # 5. Inject API hook
                 inject_api_hook(driver)
 
-                # 4. Wait for applicant name (confirms we're on the right page)
+                # 6. Wait for applicant name (confirms we're on the right page)
                 wait.until(EC.visibility_of_element_located((By.XPATH, f"//label[text()='{APPLICANT_NAME}']")))
                 print("申请人加载成功。")
 
-                # 5. Get available dates via API hook (with DOM fallback)
+                # 7. Get available dates via API hook (with DOM fallback)
                 available_dates = get_available_dates(driver, wait)
 
                 if available_dates != current_dates:
