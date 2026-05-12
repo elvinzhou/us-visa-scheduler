@@ -416,27 +416,24 @@ def do_login(driver):
             print("[登录] 点击继续按钮...")
             driver.find_element(By.ID, "continue").click()
 
-            # Wait for the page to settle on a definitive state.
-            print("[登录] 等待页面跳转结果...")
+            # Wait for signInName to disappear — that confirms we have left the
+            # credentials page (to KBA, to the site, or anywhere else).
+            # Checking for signInName *presence* right after clicking fires
+            # immediately (it's still in the DOM) and falsely detects failure.
+            # A timeout here means login truly failed (error shown in-page).
+            print("[登录] 等待signInName消失（确认已离开凭据页）...")
             try:
-                WebDriverWait(driver, 15).until(lambda d: (
-                    bool(d.find_elements(By.ID, "signInName")) or
-                    bool(d.find_elements(By.CSS_SELECTOR, "#kba1_response, #kba2_response, #kba3_response")) or
-                    ("usvisascheduling.com" in d.current_url and "login" not in d.current_url.lower())
-                ))
-            except TimeoutException:
-                pass
-
-            print(f"[登录] 跳转后URL: {driver.current_url}")
-            if driver.find_elements(By.ID, "signInName"):
-                print(f"[登录] 页面返回登录页，第{attempt+1}次失败")
-                if driver.find_elements(By.XPATH, "//*[contains(text(), 'Captcha Validation is not Successful')]"):
-                    print("[登录] 检测到验证码错误提示，刷新验证码...")
-                    _refresh_captcha(driver)
-            else:
+                WebDriverWait(driver, 15).until_not(
+                    EC.presence_of_element_located((By.ID, "signInName"))
+                )
                 print(f"[登录] signInName已消失，Stage1成功。URL: {driver.current_url}")
                 logged_in = True
                 break
+            except TimeoutException:
+                print(f"[登录] signInName未消失（登录失败），第{attempt+1}次重试...")
+                if driver.find_elements(By.XPATH, "//*[contains(text(), 'Captcha Validation is not Successful')]"):
+                    print("[登录] 检测到验证码错误提示，刷新验证码...")
+                    _refresh_captcha(driver)
         except Exception as e:
             print(f"[登录] Stage1第{attempt+1}次出错: {e}")
             time.sleep(RETRY_DELAY)
