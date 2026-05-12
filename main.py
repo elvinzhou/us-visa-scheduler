@@ -399,7 +399,8 @@ def do_login(driver):
 
             if driver.find_elements(By.ID, "signInName"):
                 print(f"登录未成功（页面返回至登录页），第 {attempt + 1} 次重试...")
-                _refresh_captcha(driver)  # get a new captcha image before retrying
+                if driver.find_elements(By.ID, "captchaRefreshImage"):
+                    _refresh_captcha(driver)  # captcha error shown — get a fresh image
             else:
                 logged_in = True
                 break
