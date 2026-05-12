@@ -308,15 +308,19 @@ def _solve_captcha(driver):
     seen_srcs = set()
     for attempt in range(MAX_RETRIES):
         try:
+            print(f"  [验证码] 等待验证码图片出现 (第{attempt+1}次)...")
             img = WebDriverWait(driver, 45).until(
                 EC.presence_of_element_located((By.ID, "captchaImage"))
             )
             src = img.get_attribute("src") or ""
+            print(f"  [验证码] 图片src: {src[:80]}...")
             if not src or src in seen_srcs:
+                print(f"  [验证码] src未变化，等待刷新...")
                 time.sleep(RETRY_DELAY)
                 continue
             seen_srcs.add(src)
 
+            print(f"  [验证码] 截图并发送至GPT...")
             img_b64 = img.screenshot_as_base64
             response = openai_client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -329,30 +333,35 @@ def _solve_captcha(driver):
                 }],
                 max_tokens=20,
             )
-            text = ''.join(response.choices[0].message.content.split())  # strip all whitespace
+            raw = response.choices[0].message.content
+            text = ''.join(raw.split())  # strip all whitespace
+            print(f"  [验证码] GPT原始回复: {repr(raw)} → 处理后: {repr(text)} ({len(text)}字符)")
             if len(text) != 5:
-                print(f"验证码识别结果异常（{len(text)}字符: {text}），刷新重试...")
+                print(f"  [验证码] 字符数异常，刷新验证码...")
                 _refresh_captcha(driver)
                 continue
             return text
         except Exception as e:
-            print(f"验证码识别第 {attempt + 1} 次失败: {e}")
+            print(f"  [验证码] 第{attempt+1}次失败: {e}")
             time.sleep(RETRY_DELAY)
+    print("  [验证码] 所有尝试均失败，返回None")
     return None
 
 
 def do_login(driver):
-    print("检测到登录页面，开始自动登录...")
+    print(f"[登录] 检测到登录页面，开始自动登录... URL: {driver.current_url}")
 
     # Stage 1: credentials + captcha
     logged_in = False
     for attempt in range(MAX_RETRIES):
+        print(f"[登录] Stage1 第{attempt+1}次尝试，当前URL: {driver.current_url}")
+
         # On the 3rd attempt the auth service may be having a transient error.
         # Try navigating straight to the schedule page — if the session cookie is
         # still valid we land there directly; if not, we get redirected to login
         # and fall through to the normal credential flow on subsequent attempts.
         if attempt == 2:
-            print("第3次尝试：直接导航至预约页面，绕过认证服务...")
+            print("[登录] 第3次尝试：直接导航至预约页面，绕过认证服务...")
             driver.get("https://www.usvisascheduling.com/zh-CN/schedule/")
             try:
                 WebDriverWait(driver, 15).until(lambda d: any(
@@ -361,15 +370,19 @@ def do_login(driver):
                 ))
             except TimeoutException:
                 pass
+            print(f"[登录] 导航后URL: {driver.current_url}")
             if not _is_login_page(driver):
+                print("[登录] 直接导航成功，已离开登录页。")
                 logged_in = True
                 break
-            print("直接导航后仍在登录页面，继续尝试凭据登录...")
+            print("[登录] 直接导航后仍在登录页面，继续尝试凭据登录...")
 
         try:
+            print(f"[登录] 等待signInName出现... URL: {driver.current_url}")
             username_field = WebDriverWait(driver, 45).until(
                 EC.presence_of_element_located((By.ID, "signInName"))
             )
+            print("[登录] signInName已出现，填写用户名和密码...")
             username_field.clear()
             username_field.send_keys(VISA_USERNAME)
 
@@ -377,22 +390,34 @@ def do_login(driver):
             password_field.clear()
             password_field.send_keys(VISA_PASSWORD)
 
+            print("[登录] 开始识别验证码...")
             captcha_text = _solve_captcha(driver)
             if not captcha_text:
-                print(f"验证码识别失败，第 {attempt + 1} 次重试...")
+                print(f"[登录] 验证码识别失败，刷新后重试...")
                 _refresh_captcha(driver)
                 continue
 
-            print(f"验证码识别结果: {captcha_text}")
-            captcha_input = driver.find_element(By.ID, "extension_atlasCaptchaResponse")
+            print(f"[登录] 验证码识别结果: {captcha_text}，当前URL: {driver.current_url}")
+
+            # The page may have navigated away during the GPT call.
+            # Confirm we're still on the credentials page before filling the input.
+            if not driver.find_elements(By.ID, "signInName"):
+                print(f"[登录] GPT调用期间页面已跳转 ({driver.current_url})，视为成功，跳出Stage1...")
+                logged_in = True
+                break
+
+            print("[登录] 填写验证码输入框...")
+            captcha_input = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, "extension_atlasCaptchaResponse"))
+            )
             captcha_input.clear()
             captcha_input.send_keys(captcha_text)
 
+            print("[登录] 点击继续按钮...")
             driver.find_element(By.ID, "continue").click()
 
             # Wait for the page to settle on a definitive state.
-            # A point-in-time check after a short sleep mis-detects a slow
-            # redirect back to login as success (signInName not yet in DOM).
+            print("[登录] 等待页面跳转结果...")
             try:
                 WebDriverWait(driver, 15).until(lambda d: (
                     bool(d.find_elements(By.ID, "signInName")) or
@@ -402,50 +427,61 @@ def do_login(driver):
             except TimeoutException:
                 pass
 
+            print(f"[登录] 跳转后URL: {driver.current_url}")
             if driver.find_elements(By.ID, "signInName"):
-                print(f"登录未成功（页面返回至登录页），第 {attempt + 1} 次重试...")
+                print(f"[登录] 页面返回登录页，第{attempt+1}次失败")
                 if driver.find_elements(By.XPATH, "//*[contains(text(), 'Captcha Validation is not Successful')]"):
-                    _refresh_captcha(driver)  # captcha error shown — get a fresh image
+                    print("[登录] 检测到验证码错误提示，刷新验证码...")
+                    _refresh_captcha(driver)
             else:
+                print(f"[登录] signInName已消失，Stage1成功。URL: {driver.current_url}")
                 logged_in = True
                 break
         except Exception as e:
-            print(f"登录第 {attempt + 1} 次出错: {e}")
+            print(f"[登录] Stage1第{attempt+1}次出错: {e}")
             time.sleep(RETRY_DELAY)
 
     if not logged_in:
-        print("凭据登录失败，已达最大重试次数。")
+        print("[登录] 凭据登录失败，已达最大重试次数。")
         send_relogin_email()
         return False
 
     # Stage 2: security questions (may or may not appear)
+    print(f"[登录] Stage1完成，进入Stage2检测。当前URL: {driver.current_url}")
     try:
         WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "#kba1_response, #kba2_response, #kba3_response"))
         )
-        print("检测到安全问题页面，正在填写...")
+        print("[登录] 检测到安全问题页面，正在填写...")
         for selector, answer in SECURITY_ANSWERS.items():
             if not answer:
                 continue
-            for _ in range(3):
+            print(f"[登录] 填写安全问题 {selector}...")
+            for retry in range(3):
                 try:
                     field = driver.find_element(By.CSS_SELECTOR, selector)
                     if field.is_displayed():
                         field.clear()
                         field.send_keys(answer)
+                        print(f"[登录] {selector} 填写成功")
                     break
                 except StaleElementReferenceException:
+                    print(f"[登录] {selector} stale element，重试{retry+1}/3...")
                     time.sleep(0.5)
                 except NoSuchElementException:
+                    print(f"[登录] {selector} 未找到，跳过")
                     break
 
+        print("[登录] 安全问题填写完毕，点击继续...")
         driver.find_element(By.ID, "continue").click()
-    except Exception:
-        pass  # No security questions, already navigated away, or page variation
+        print(f"[登录] 点击后URL: {driver.current_url}")
+    except Exception as e:
+        print(f"[登录] Stage2异常（可能无安全问题页面）: {e}")
 
     # Wait until the browser has finished navigating AND has left the auth domain.
     # ignored_exceptions ensures that WebDriverExceptions thrown by the lambda
     # during an active navigation are retried rather than propagated.
+    print(f"[登录] 等待浏览器离开认证域... 当前URL: {driver.current_url}")
     try:
         WebDriverWait(driver, 60, ignored_exceptions=(WebDriverException,)).until(lambda d: (
             d.execute_script("return document.readyState") == "complete"
@@ -454,10 +490,11 @@ def do_login(driver):
             and "login" not in d.current_url.lower()
         ))
     except (TimeoutException, WebDriverException):
-        print(f"登录失败：导航结束后仍在认证页面 ({driver.current_url})")
+        print(f"[登录] 失败：导航结束后仍在认证页面 ({driver.current_url})")
         return False
 
-    print("登录成功！")
+    print(f"[登录] 登录成功！最终URL: {driver.current_url}")
+
     return True
 
 
