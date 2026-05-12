@@ -330,7 +330,7 @@ def _solve_captcha(driver):
                 max_tokens=20,
             )
             text = response.choices[0].message.content.strip()
-            if len(text) > 5:
+            if len(text) != 5:
                 print(f"验证码识别结果异常（{len(text)}字符: {text}），刷新重试...")
                 _refresh_captcha(driver)
                 continue
@@ -441,6 +441,19 @@ def do_login(driver):
         )
     except TimeoutException:
         pass  # No security questions or already navigated away
+
+    # Regardless of whether KBA was shown, wait for the browser to fully leave
+    # the auth domain before returning. Without this, do_login can return True
+    # while still mid-redirect on b2clogin, causing _navigate in the main loop
+    # to race against the in-flight redirect and land back on the login page.
+    try:
+        WebDriverWait(driver, 30).until(
+            lambda d: "b2clogin" not in d.current_url.lower()
+                      and "microsoftonline" not in d.current_url.lower()
+                      and "login" not in d.current_url.lower()
+        )
+    except TimeoutException:
+        pass
 
     print("登录成功！")
     return True
