@@ -436,23 +436,20 @@ def do_login(driver):
                 pass
 
         driver.find_element(By.ID, "continue").click()
-        WebDriverWait(driver, 30).until(
-            lambda d: "usvisascheduling.com" in d.current_url and "login" not in d.current_url.lower()
-        )
-    except TimeoutException:
-        pass  # No security questions or already navigated away
+    except Exception:
+        pass  # No security questions, already navigated away, or page variation
 
     # Wait until the browser has finished navigating AND has left the auth domain.
-    # Combining readyState with the URL check avoids false positives where
-    # readyState briefly becomes "complete" on an intermediate redirect page.
+    # ignored_exceptions ensures that WebDriverExceptions thrown by the lambda
+    # during an active navigation are retried rather than propagated.
     try:
-        WebDriverWait(driver, 60).until(lambda d: (
+        WebDriverWait(driver, 60, ignored_exceptions=(WebDriverException,)).until(lambda d: (
             d.execute_script("return document.readyState") == "complete"
             and "b2clogin" not in d.current_url.lower()
             and "microsoftonline" not in d.current_url.lower()
             and "login" not in d.current_url.lower()
         ))
-    except TimeoutException:
+    except (TimeoutException, WebDriverException):
         print(f"登录失败：导航结束后仍在认证页面 ({driver.current_url})")
         return False
 
