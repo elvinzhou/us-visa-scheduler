@@ -442,16 +442,18 @@ def do_login(driver):
     except TimeoutException:
         pass  # No security questions or already navigated away
 
-    # Confirm the browser has left the auth domain before declaring success.
-    # If still on b2clogin/microsoftonline after 30s, treat as a login failure.
+    # Wait until the browser has finished navigating AND has left the auth domain.
+    # Combining readyState with the URL check avoids false positives where
+    # readyState briefly becomes "complete" on an intermediate redirect page.
     try:
-        WebDriverWait(driver, 30).until(
-            lambda d: "b2clogin" not in d.current_url.lower()
-                      and "microsoftonline" not in d.current_url.lower()
-                      and "login" not in d.current_url.lower()
-        )
+        WebDriverWait(driver, 60).until(lambda d: (
+            d.execute_script("return document.readyState") == "complete"
+            and "b2clogin" not in d.current_url.lower()
+            and "microsoftonline" not in d.current_url.lower()
+            and "login" not in d.current_url.lower()
+        ))
     except TimeoutException:
-        print(f"登录超时：30秒后仍在认证页面 ({driver.current_url})，视为失败。")
+        print(f"登录失败：导航结束后仍在认证页面 ({driver.current_url})")
         return False
 
     print("登录成功！")
