@@ -374,16 +374,23 @@ def do_login(driver):
             captcha_input.send_keys(captcha_text)
 
             driver.find_element(By.ID, "continue").click()
-            time.sleep(3)
 
-            # Success if signInName is gone — means we've advanced past the
-            # credentials page (to KBA page or to the site). We check the element
-            # rather than the URL because the KBA page is also on b2clogin and
-            # would otherwise be mistaken for the credentials page.
+            # Wait for the page to settle on a definitive state.
+            # A point-in-time check after a short sleep mis-detects a slow
+            # redirect back to login as success (signInName not yet in DOM).
             try:
-                driver.find_element(By.ID, "signInName")
-                print(f"登录未成功，第 {attempt + 1} 次重试...")
-            except NoSuchElementException:
+                WebDriverWait(driver, 15).until(lambda d: (
+                    bool(d.find_elements(By.ID, "signInName")) or
+                    bool(d.find_elements(By.CSS_SELECTOR, "#kba1_response, #kba2_response, #kba3_response")) or
+                    ("usvisascheduling.com" in d.current_url and "login" not in d.current_url.lower())
+                ))
+            except TimeoutException:
+                pass
+
+            if driver.find_elements(By.ID, "signInName"):
+                print(f"登录未成功（页面返回至登录页），第 {attempt + 1} 次重试...")
+                driver.refresh()  # ensure a fresh captcha on next attempt
+            else:
                 logged_in = True
                 break
         except Exception as e:
