@@ -11,7 +11,7 @@ import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, UnexpectedAlertPresentException, NoSuchElementException
+from selenium.common.exceptions import TimeoutException, UnexpectedAlertPresentException, NoSuchElementException, StaleElementReferenceException
 import time
 import smtplib
 import ssl
@@ -329,7 +329,7 @@ def _solve_captcha(driver):
                 }],
                 max_tokens=20,
             )
-            text = response.choices[0].message.content.strip()
+            text = ''.join(response.choices[0].message.content.split())  # strip all whitespace
             if len(text) != 5:
                 print(f"验证码识别结果异常（{len(text)}字符: {text}），刷新重试...")
                 _refresh_captcha(driver)
@@ -427,13 +427,17 @@ def do_login(driver):
         for selector, answer in SECURITY_ANSWERS.items():
             if not answer:
                 continue
-            try:
-                field = driver.find_element(By.CSS_SELECTOR, selector)
-                if field.is_displayed():
-                    field.clear()
-                    field.send_keys(answer)
-            except NoSuchElementException:
-                pass
+            for _ in range(3):
+                try:
+                    field = driver.find_element(By.CSS_SELECTOR, selector)
+                    if field.is_displayed():
+                        field.clear()
+                        field.send_keys(answer)
+                    break
+                except StaleElementReferenceException:
+                    time.sleep(0.5)
+                except NoSuchElementException:
+                    break
 
         driver.find_element(By.ID, "continue").click()
     except Exception:
