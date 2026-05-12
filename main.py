@@ -329,7 +329,12 @@ def _solve_captcha(driver):
                 }],
                 max_tokens=20,
             )
-            return response.choices[0].message.content.strip()
+            text = response.choices[0].message.content.strip()
+            if len(text) > 5:
+                print(f"验证码识别结果异常（{len(text)}字符: {text}），刷新重试...")
+                _refresh_captcha(driver)
+                continue
+            return text
         except Exception as e:
             print(f"验证码识别第 {attempt + 1} 次失败: {e}")
             time.sleep(RETRY_DELAY)
