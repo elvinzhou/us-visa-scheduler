@@ -293,6 +293,17 @@ def _is_login_page(driver):
         return False
 
 
+def _refresh_captcha(driver):
+    """Click the captcha refresh button to get a new image, falling back to a full page refresh."""
+    try:
+        driver.find_element(By.ID, "captchaRefreshImage").click()
+        print("已点击验证码刷新按钮，等待新验证码...")
+    except NoSuchElementException:
+        driver.refresh()
+        print("未找到验证码刷新按钮，已刷新页面。")
+    time.sleep(RETRY_DELAY)
+
+
 def _solve_captcha(driver):
     seen_srcs = set()
     for attempt in range(MAX_RETRIES):
@@ -364,8 +375,7 @@ def do_login(driver):
             captcha_text = _solve_captcha(driver)
             if not captcha_text:
                 print(f"验证码识别失败，第 {attempt + 1} 次重试...")
-                driver.refresh()
-                time.sleep(RETRY_DELAY)
+                _refresh_captcha(driver)
                 continue
 
             print(f"验证码识别结果: {captcha_text}")
@@ -389,7 +399,7 @@ def do_login(driver):
 
             if driver.find_elements(By.ID, "signInName"):
                 print(f"登录未成功（页面返回至登录页），第 {attempt + 1} 次重试...")
-                driver.refresh()  # ensure a fresh captcha on next attempt
+                _refresh_captcha(driver)  # get a new captcha image before retrying
             else:
                 logged_in = True
                 break
