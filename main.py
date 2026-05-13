@@ -746,19 +746,26 @@ def main():
                     pass
                 countdown_timer(60)
             except Exception as e:
+                if _is_transient_error(e):
+                    print(f"服务器临时错误: {e}")
+                    print(f"等待 {server_backoff // 60} 分{server_backoff % 60:02d}秒后重试...")
+                    countdown_timer(server_backoff)
+                    server_backoff *= 2
+                    continue
+
                 print(f"本轮检查出现错误: {e}")
                 traceback.print_exc()
                 try:
                     current_url = driver.current_url
                 except Exception:
                     current_url = ""
-                if "usvisascheduling.com" not in current_url or "login" in current_url.lower():
-                    print("检测到会话已过期，尝试重新登录...")
-                    countdown_timer(10)
-                elif _is_transient_error(e) or _is_cloudflare_page(driver):
-                    print(f"检测到服务器临时错误，等待 {server_backoff // 60} 分{server_backoff % 60:02d}秒后重试...")
+                if _is_cloudflare_page(driver):
+                    print(f"检测到Cloudflare页面，等待 {server_backoff // 60} 分{server_backoff % 60:02d}秒后重试...")
                     countdown_timer(server_backoff)
                     server_backoff *= 2
+                elif "usvisascheduling.com" not in current_url or "login" in current_url.lower():
+                    print("检测到会话已过期，尝试重新登录...")
+                    countdown_timer(10)
                 else:
                     server_backoff = 60
                     print("将等待1分钟后重试。")
