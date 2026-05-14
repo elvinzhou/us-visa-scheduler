@@ -421,10 +421,38 @@ def _handle_cloudflare_challenge(driver):
                 else:
                     no_iframe_ticks += 1
                     remaining = int(deadline - time.time())
-                    # After ~10s of no iframe, try screenshot-based click (the widget
-                    # may be inside a nested same-origin iframe invisible to JS/DOM)
-                    if no_iframe_ticks == 5 and not iframe_clicked:
-                        print("  [CF] DOM未找到iframe，尝试截图识别并点击验证框...")
+                    if not iframe_clicked:
+                        # Strategy: find the Turnstile container via the hidden response
+                        # inputs that Cloudflare always puts in the main DOM.
+                        # The widget container (closed shadow root host) has an id like
+                        # "cf-chl-widget-{id}" derived from the input id.
+                        if no_iframe_ticks == 2:
+                            try:
+                                resp_inputs = driver.find_elements(
+                                    By.CSS_SELECTOR,
+                                    "input[id*='cf-chl-widget'][id$='_response']"
+                                )
+                                if resp_inputs:
+                                    input_id = resp_inputs[0].get_attribute("id")
+                                    widget_id = input_id.rsplit("_", 1)[0]  # e.g. cf-chl-widget-sdajq
+                                    print(f"  [CF] 找到Turnstile widget响应字段: {input_id}")
+                                    try:
+                                        container = driver.find_element(By.ID, widget_id)
+                                        # Checkbox is ~25px from left of the 300×65px widget;
+                                        # move_to_element_with_offset is relative to element center
+                                        ActionChains(driver).move_to_element_with_offset(
+                                            container, -125, 0
+                                        ).pause(0.4).click().perform()
+                                        iframe_clicked = True
+                                        print(f"  [CF] 已点击widget容器 #{widget_id}")
+                                    except Exception as e:
+                                        print(f"  [CF] widget容器点击失败: {e}")
+                            except Exception as e:
+                                print(f"  [CF] 查找widget字段失败: {e}")
+
+                        # After ~10s still no luck — use screenshot + GPT
+                        if no_iframe_ticks == 5 and not iframe_clicked:
+                            print("  [CF] DOM未找到iframe，尝试截图识别并点击验证框...")
                         if _click_cf_via_screenshot(driver):
                             iframe_clicked = True
                     print(f"  [CF] 等待中（无iframe）... 剩余 {remaining}s")
