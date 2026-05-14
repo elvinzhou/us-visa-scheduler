@@ -12,6 +12,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, UnexpectedAlertPresentException, NoSuchElementException, StaleElementReferenceException, WebDriverException
+from selenium.webdriver.common.action_chains import ActionChains
 import time
 import smtplib
 import ssl
@@ -261,34 +262,73 @@ def _is_cloudflare_challenge(driver):
 
 def _handle_cloudflare_challenge(driver):
     """Handle any Cloudflare page: Turnstile checkbox or auto-resolving interstitial.
-    - If the Turnstile iframe appears within 5s, try to click the checkbox.
-    - If not (auto-resolving interstitial), wait up to 30s for it to clear.
-    - On failure either way, email the user and poll for up to 5 minutes."""
+    - Waits up to 15s for the Turnstile iframe to appear (it loads dynamically).
+    - Logs all iframes found to aid debugging.
+    - Uses ActionChains for a human-like click; falls back to coordinate click.
+    - If auto-click fails, emails the user and waits up to 10 minutes for manual resolution."""
     print("检测到Cloudflare页面，等待或尝试自动处理...")
-
-    # Check if it's a Turnstile challenge (iframe appears within 5s)
     try:
-        iframe = WebDriverWait(driver, 5).until(
-            EC.presence_of_element_located(
-                (By.CSS_SELECTOR, _CF_IFRAME_SELECTOR)
-            )
+        print(f"  [CF] 当前URL: {driver.current_url}")
+        print(f"  [CF] 页面标题: {driver.title}")
+    except Exception:
+        pass
+
+    challenge_iframe = None
+    try:
+        # Log all iframes immediately so we can see what's present
+        all_iframes = driver.find_elements(By.TAG_NAME, "iframe")
+        if all_iframes:
+            print(f"  [CF] 当前发现 {len(all_iframes)} 个iframe:")
+            for f in all_iframes:
+                print(f"    src={( f.get_attribute('src') or '')[:100]}  title={f.get_attribute('title') or ''}")
+        else:
+            print("  [CF] 当前无iframe，等待最多15秒...")
+
+        # The Turnstile iframe is injected by JS and can take several seconds
+        challenge_iframe = WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, _CF_IFRAME_SELECTOR))
         )
-        print("检测到Turnstile验证框，尝试自动点击...")
-        driver.switch_to.frame(iframe)
+        src = (challenge_iframe.get_attribute("src") or "")[:100]
+        title = challenge_iframe.get_attribute("title") or ""
+        print(f"  [CF] 检测到Turnstile iframe: title='{title}', src={src}")
+
+        # Strategy 1: switch into iframe and click the checkbox with ActionChains
+        driver.switch_to.frame(challenge_iframe)
+        clicked = False
         try:
-            checkbox = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable(
+            checkbox = WebDriverWait(driver, 8).until(
+                EC.presence_of_element_located(
                     (By.CSS_SELECTOR, "input[type='checkbox'], .ctp-checkbox-label, label")
                 )
             )
-            checkbox.click()
-            print("已点击验证框，等待验证通过...")
+            tag = checkbox.tag_name
+            cls = checkbox.get_attribute("class") or ""
+            print(f"  [CF] 找到 <{tag} class='{cls}'>，使用ActionChains点击...")
+            ActionChains(driver).move_to_element(checkbox).pause(0.4).click(checkbox).perform()
+            clicked = True
+            print("  [CF] 已点击验证框，等待验证通过...")
+        except TimeoutException:
+            print("  [CF] iframe内未找到复选框，将尝试坐标点击。")
+        except Exception as e:
+            print(f"  [CF] iframe内点击失败: {e}")
         finally:
             driver.switch_to.default_content()
+
+        # Strategy 2: if checkbox wasn't clicked, click at the checkbox position
+        # The Turnstile widget is 300×65px; the checkbox is ~25px from the left edge
+        if not clicked:
+            try:
+                ActionChains(driver).move_to_element_with_offset(
+                    challenge_iframe, 25, 32
+                ).pause(0.4).click().perform()
+                print("  [CF] 已在iframe坐标(25,32)点击。")
+            except Exception as e:
+                print(f"  [CF] 坐标点击失败: {e}")
+
     except TimeoutException:
-        print("未检测到Turnstile iframe，可能是自动解析的拦截页，等待自动通过...")
+        print("  [CF] 15秒内未检测到Turnstile iframe，可能是自动解析的拦截页，等待自动通过...")
     except Exception as e:
-        print(f"点击验证框失败: {e}")
+        print(f"  [CF] 处理Turnstile失败: {e}")
         try:
             driver.switch_to.default_content()
         except Exception:
@@ -304,14 +344,14 @@ def _handle_cloudflare_challenge(driver):
     except TimeoutException:
         pass
 
-    # Still blocked — notify and wait for manual resolution
+    # Still blocked — notify and wait for manual resolution (10 minutes)
     print("自动处理失败，发送邮件通知等待手动操作...")
     _send_email(
         f"【签证监控】{LOCATION_NAME} 需要手动完成Cloudflare验证",
         f"领事馆: {LOCATION_NAME}\n\n脚本遇到Cloudflare人机验证，自动处理失败。\n"
-        f"请在浏览器中手动完成验证。\n脚本将等待最多5分钟后继续。",
+        f"请在浏览器中手动完成验证。\n脚本将等待最多10分钟后继续。",
     )
-    deadline = time.time() + 5 * 60
+    deadline = time.time() + 10 * 60
     while time.time() < deadline:
         try:
             if not _is_cloudflare_page(driver) and not _is_cloudflare_challenge(driver):
