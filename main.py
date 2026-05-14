@@ -302,6 +302,54 @@ def _is_cloudflare_challenge(driver):
     except Exception:
         return False
 
+def _click_cf_via_screenshot(driver):
+    """Take a screenshot of the Cloudflare challenge and ask GPT-4o-mini for the
+    pixel coordinates of the checkbox, then click there using ActionChains.
+    Returns True if a click was attempted."""
+    try:
+        img_b64 = driver.get_screenshot_as_base64()
+        resp = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": (
+                        "This is a Cloudflare 'Verify you are human' challenge screenshot. "
+                        "Find the checkbox (the small square on the left of the widget) that "
+                        "the user must click to pass the challenge. "
+                        "Reply with ONLY two integers separated by a comma: "
+                        "the x and y pixel coordinates of the checkbox center "
+                        "(e.g. '155,430'). If no checkbox is visible, reply: none"
+                    )},
+                    {"type": "image_url", "image_url": {
+                        "url": f"data:image/png;base64,{img_b64}",
+                        "detail": "low",
+                    }},
+                ],
+            }],
+            max_tokens=15,
+        )
+        raw = resp.choices[0].message.content.strip()
+        print(f"  [CF] GPT截图坐标: {repr(raw)}")
+        if "none" in raw.lower():
+            return False
+        parts = raw.replace(" ", "").split(",")
+        gpt_x, gpt_y = int(parts[0]), int(parts[1])
+        # Click at viewport-relative (gpt_x, gpt_y) using body-center offset
+        body = driver.find_element(By.TAG_NAME, "body")
+        rect = driver.execute_script("return document.body.getBoundingClientRect();")
+        center_x = rect["x"] + rect["width"] / 2
+        center_y = rect["y"] + rect["height"] / 2
+        ActionChains(driver).move_to_element_with_offset(
+            body, gpt_x - center_x, gpt_y - center_y
+        ).pause(0.3).click().perform()
+        print(f"  [CF] 已截图点击 ({gpt_x}, {gpt_y})")
+        return True
+    except Exception as e:
+        print(f"  [CF] screenshot点击失败: {e}")
+        return False
+
+
 def _handle_cloudflare_challenge(driver):
     """Handle Cloudflare pages — two types:
     1. Auto-resolving interstitial ("Just a moment..."): no iframe, resolves on its own.
@@ -314,6 +362,7 @@ def _handle_cloudflare_challenge(driver):
         pass
 
     iframe_clicked = False
+    no_iframe_ticks = 0
     deadline = time.time() + 60
     while time.time() < deadline:
         try:
@@ -370,41 +419,14 @@ def _handle_cloudflare_challenge(driver):
                     if clicked:
                         iframe_clicked = True
                 else:
+                    no_iframe_ticks += 1
                     remaining = int(deadline - time.time())
-                    # Every ~10s, dump a full DOM snapshot so we can see what's there
-                    if remaining % 10 == 1 or remaining >= 57:
-                        try:
-                            dom_info = driver.execute_script("""
-                                var lines = [];
-                                var iframes = document.querySelectorAll('iframe');
-                                lines.push('iframes(' + iframes.length + '):');
-                                iframes.forEach(function(f) {
-                                    lines.push('  src=' + (f.getAttribute('src')||'').substring(0,80)
-                                        + ' title=' + (f.getAttribute('title')||'none'));
-                                });
-                                var shadowCount = 0;
-                                document.querySelectorAll('*').forEach(function(el) {
-                                    if (el.shadowRoot) {
-                                        shadowCount++;
-                                        var si = el.shadowRoot.querySelectorAll('iframe');
-                                        lines.push('shadowRoot on <' + el.tagName
-                                            + ' id=' + (el.id||'') + '>: ' + si.length + ' iframes');
-                                        si.forEach(function(f) {
-                                            lines.push('  src=' + (f.getAttribute('src')||'').substring(0,80));
-                                        });
-                                    }
-                                });
-                                if (shadowCount === 0) lines.push('(no shadow roots)');
-                                var cfEls = document.querySelectorAll('[class*="cf-"],[id*="cf-"],[class*="turnstile"],[id*="turnstile"]');
-                                lines.push('cf/turnstile elements: ' + cfEls.length);
-                                cfEls.forEach(function(el) {
-                                    lines.push('  <' + el.tagName + ' id=' + (el.id||'') + ' class=' + (el.className||'').substring(0,40) + '>');
-                                });
-                                return lines.join('\\n');
-                            """)
-                            print(f"  [CF-DOM] {dom_info.replace(chr(10), chr(10) + '  [CF-DOM] ')}")
-                        except Exception as de:
-                            print(f"  [CF-DOM] 诊断失败: {de}")
+                    # After ~10s of no iframe, try screenshot-based click (the widget
+                    # may be inside a nested same-origin iframe invisible to JS/DOM)
+                    if no_iframe_ticks == 5 and not iframe_clicked:
+                        print("  [CF] DOM未找到iframe，尝试截图识别并点击验证框...")
+                        if _click_cf_via_screenshot(driver):
+                            iframe_clicked = True
                     print(f"  [CF] 等待中（无iframe）... 剩余 {remaining}s")
         except Exception as e:
             print(f"  [CF] 轮询异常: {e}")
