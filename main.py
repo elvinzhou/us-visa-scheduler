@@ -357,6 +357,62 @@ def _click_cf_via_screenshot(driver):
         return False
 
 
+def _try_frame_index_click(driver):
+    """Try switching to frames by index (uses CDP frame tree, not querySelectorAll).
+    The orchestrate script creates a same-origin frame that is invisible to
+    DOM queries but may still be reachable via driver.switch_to.frame(index).
+    Returns True if a click was attempted."""
+    for frame_idx in range(5):
+        try:
+            driver.switch_to.default_content()
+            driver.switch_to.frame(frame_idx)
+            body_text = ""
+            try:
+                body_text = driver.find_element(By.TAG_NAME, "body").text[:80]
+            except Exception:
+                pass
+            print(f"  [CF] frame[{frame_idx}]: '{body_text}'")
+
+            # Look for the Turnstile iframe inside this frame
+            inner_iframes = driver.find_elements(By.CSS_SELECTOR, _CF_IFRAME_SELECTOR)
+            if inner_iframes:
+                print(f"  [CF] frame[{frame_idx}]中发现Turnstile iframe，尝试点击...")
+                driver.switch_to.frame(inner_iframes[0])
+                try:
+                    checkbox = WebDriverWait(driver, 3).until(
+                        EC.presence_of_element_located(
+                            (By.CSS_SELECTOR, "input[type='checkbox'], .ctp-checkbox-label, label")
+                        )
+                    )
+                    ActionChains(driver).move_to_element(checkbox).pause(0.4).click(checkbox).perform()
+                    print(f"  [CF] 已点击 frame[{frame_idx}] > Turnstile 内的复选框")
+                    driver.switch_to.default_content()
+                    return True
+                except Exception as e:
+                    print(f"  [CF] 内层iframe点击失败: {e}")
+                driver.switch_to.default_content()
+                continue
+
+            # Also try clicking a checkbox directly in this frame
+            try:
+                checkbox = driver.find_element(By.CSS_SELECTOR, "input[type='checkbox']")
+                ActionChains(driver).move_to_element(checkbox).pause(0.4).click(checkbox).perform()
+                print(f"  [CF] 已点击 frame[{frame_idx}] 内的复选框")
+                driver.switch_to.default_content()
+                return True
+            except NoSuchElementException:
+                pass
+
+        except Exception as e:
+            print(f"  [CF] frame[{frame_idx}] 切换失败: {e}")
+        finally:
+            try:
+                driver.switch_to.default_content()
+            except Exception:
+                pass
+    return False
+
+
 def _handle_cloudflare_challenge(driver):
     """Handle Cloudflare pages: auto-resolving interstitial OR Turnstile checkbox.
 
@@ -424,9 +480,12 @@ def _handle_cloudflare_challenge(driver):
                 else:
                     no_iframe_ticks += 1
                     remaining = int(deadline - time.time())
-                    # Starting at tick 5 (~10s), try screenshot click every 10 ticks.
-                    # Don't block on one attempt — keep retrying so a late-loading
-                    # challenge still gets clicked.
+                    # Tick 3 (~6s): try switching into the orchestrate frame by index
+                    # (CDP frame tree is accessible even when querySelectorAll sees nothing)
+                    if no_iframe_ticks == 3:
+                        print("  [CF] 尝试按帧索引切换并点击...")
+                        _try_frame_index_click(driver)
+                    # Tick 5, 15, 25 … : GPT screenshot fallback
                     if no_iframe_ticks >= 5 and (no_iframe_ticks - 5) % 10 == 0:
                         print(f"  [CF] 截图尝试 (tick {no_iframe_ticks})...")
                         _click_cf_via_screenshot(driver)
