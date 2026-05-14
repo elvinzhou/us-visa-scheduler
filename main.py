@@ -241,6 +241,74 @@ def _is_cloudflare_page(driver):
     except Exception:
         return False
 
+def _is_cloudflare_challenge(driver):
+    """Detect a Cloudflare Turnstile checkbox challenge (distinct from the
+    brief 'just a moment' interstitial which resolves on its own)."""
+    try:
+        if driver.find_elements(By.CSS_SELECTOR, "iframe[src*='challenges.cloudflare.com']"):
+            return True
+        body = driver.find_element(By.TAG_NAME, "body").text.lower()
+        return "verify you are human" in body or "complete the security check" in body
+    except Exception:
+        return False
+
+def _handle_cloudflare_challenge(driver):
+    """Try to auto-click the Turnstile checkbox. On failure, email the user
+    and poll for up to 5 minutes for a manual click."""
+    print("检测到Cloudflare人机验证挑战，尝试自动点击...")
+    try:
+        iframe = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located(
+                (By.CSS_SELECTOR, "iframe[src*='challenges.cloudflare.com']")
+            )
+        )
+        driver.switch_to.frame(iframe)
+        try:
+            checkbox = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable(
+                    (By.CSS_SELECTOR, "input[type='checkbox'], .ctp-checkbox-label, label")
+                )
+            )
+            checkbox.click()
+            print("已点击验证框，等待验证通过...")
+        finally:
+            driver.switch_to.default_content()
+
+        # Wait up to 30s for the challenge iframe to disappear
+        try:
+            WebDriverWait(driver, 30).until_not(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, "iframe[src*='challenges.cloudflare.com']")
+                )
+            )
+            print("Cloudflare验证已自动通过！")
+            return True
+        except TimeoutException:
+            print("自动点击后验证未通过，发送邮件等待手动操作...")
+    except Exception as e:
+        print(f"自动点击验证失败: {e}")
+        try:
+            driver.switch_to.default_content()
+        except Exception:
+            pass
+
+    _send_email(
+        f"【签证监控】{LOCATION_NAME} 需要手动完成Cloudflare验证",
+        f"领事馆: {LOCATION_NAME}\n\n脚本遇到Cloudflare人机验证，自动点击失败。\n"
+        f"请在浏览器中手动点击验证框。\n脚本将等待最多5分钟后继续。",
+    )
+    deadline = time.time() + 5 * 60
+    while time.time() < deadline:
+        try:
+            if not driver.find_elements(By.CSS_SELECTOR, "iframe[src*='challenges.cloudflare.com']"):
+                print("Cloudflare验证已手动通过！")
+                return True
+        except Exception:
+            pass
+        time.sleep(5)
+    print("等待超时，Cloudflare验证未通过。")
+    return False
+
 def _navigate(driver, url):
     """Navigate to url, retrying indefinitely with exponential backoff starting at 30s."""
     delay = 30
@@ -249,8 +317,10 @@ def _navigate(driver, url):
         attempt += 1
         try:
             driver.get(url)
-            if _is_cloudflare_page(driver):
-                raise WebDriverException("Cloudflare challenge page detected")
+            if _is_cloudflare_challenge(driver):
+                _handle_cloudflare_challenge(driver)
+            elif _is_cloudflare_page(driver):
+                raise WebDriverException("Cloudflare interstitial detected")
             return
         except Exception as e:
             print(f"页面加载失败 (第{attempt}次): {e}\n等待{delay}秒后重试...")
@@ -620,8 +690,10 @@ def main():
 
                 driver.refresh()
                 print("页面已刷新，等待页面加载...")
-                if _is_cloudflare_page(driver):
-                    raise WebDriverException("Cloudflare challenge page detected")
+                if _is_cloudflare_challenge(driver):
+                    _handle_cloudflare_challenge(driver)
+                elif _is_cloudflare_page(driver):
+                    raise WebDriverException("Cloudflare interstitial detected")
 
                 # Dismiss JS alert that appeared during/after the refresh
                 try:
