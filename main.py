@@ -304,9 +304,19 @@ def _is_cloudflare_challenge(driver):
 
 def _click_cf_via_screenshot(driver):
     """Take a screenshot of the Cloudflare challenge and ask GPT-4o-mini for the
-    pixel coordinates of the checkbox, then click there using ActionChains.
-    Returns True if a click was attempted."""
+    pixel coordinates of the checkbox, then click there with a human-like ActionChains.
+    Returns True if a click was attempted with valid coordinates."""
     try:
+        # Only proceed if the challenge text is actually visible on the page
+        body_text = ""
+        try:
+            body_text = driver.find_element(By.TAG_NAME, "body").text.lower()
+        except Exception:
+            pass
+        if not any(kw in body_text for kw in ("verify", "human", "challenge", "check")):
+            print("  [CF] 挑战文字未出现，跳过截图。")
+            return False
+
         img_b64 = driver.get_screenshot_as_base64()
         resp = openai_client.chat.completions.create(
             model="gpt-4o-mini",
@@ -314,16 +324,15 @@ def _click_cf_via_screenshot(driver):
                 "role": "user",
                 "content": [
                     {"type": "text", "text": (
-                        "This is a Cloudflare 'Verify you are human' challenge screenshot. "
-                        "Find the checkbox (the small square on the left of the widget) that "
-                        "the user must click to pass the challenge. "
-                        "Reply with ONLY two integers separated by a comma: "
-                        "the x and y pixel coordinates of the checkbox center "
-                        "(e.g. '155,430'). If no checkbox is visible, reply: none"
+                        "This screenshot shows a Cloudflare 'Verify you are human' page. "
+                        "There is a small square checkbox on the LEFT side of the white widget. "
+                        "Return ONLY the x,y pixel coordinates of the CENTER of that checkbox square. "
+                        "Format: integer,integer — e.g. '155,430'. "
+                        "If you cannot see a checkbox, reply: none"
                     )},
                     {"type": "image_url", "image_url": {
                         "url": f"data:image/png;base64,{img_b64}",
-                        "detail": "low",
+                        "detail": "high",
                     }},
                 ],
             }],
@@ -335,14 +344,22 @@ def _click_cf_via_screenshot(driver):
             return False
         parts = raw.replace(" ", "").split(",")
         gpt_x, gpt_y = int(parts[0]), int(parts[1])
-        # Click at viewport-relative (gpt_x, gpt_y) using body-center offset
+
         body = driver.find_element(By.TAG_NAME, "body")
         rect = driver.execute_script("return document.body.getBoundingClientRect();")
         center_x = rect["x"] + rect["width"] / 2
         center_y = rect["y"] + rect["height"] / 2
+
+        # Brief random mouse movement before clicking (more human-like)
+        ActionChains(driver).move_to_element_with_offset(
+            body,
+            random.randint(-100, 100),
+            random.randint(-50, 50),
+        ).pause(0.3).perform()
+
         ActionChains(driver).move_to_element_with_offset(
             body, gpt_x - center_x, gpt_y - center_y
-        ).pause(0.3).click().perform()
+        ).pause(0.4).click().perform()
         print(f"  [CF] 已截图点击 ({gpt_x}, {gpt_y})")
         return True
     except Exception as e:
@@ -351,10 +368,14 @@ def _click_cf_via_screenshot(driver):
 
 
 def _handle_cloudflare_challenge(driver):
-    """Handle Cloudflare pages — two types:
-    1. Auto-resolving interstitial ("Just a moment..."): no iframe, resolves on its own.
-    2. Turnstile checkbox challenge: iframe from challenges.cloudflare.com appears.
-    Polls every 2s for up to 60s handling either case as it occurs."""
+    """Handle Cloudflare pages: auto-resolving interstitial OR Turnstile checkbox.
+
+    Polls every 2s for up to 60s:
+    - Returns immediately when the page clears.
+    - If a Turnstile iframe is detectable (standard/Shadow-DOM), clicks the checkbox.
+    - Otherwise, starting at tick 5 and retrying every 10 ticks, takes a screenshot
+      and asks GPT-4o-mini to locate the checkbox coordinates, then clicks there.
+    Falls back to email + 10-min manual wait if still blocked at 60s."""
     print("检测到Cloudflare页面，等待或尝试自动处理...")
     try:
         print(f"  [CF] URL: {driver.current_url}  标题: {driver.title}")
@@ -366,23 +387,18 @@ def _handle_cloudflare_challenge(driver):
     deadline = time.time() + 60
     while time.time() < deadline:
         try:
-            # Check if the challenge has already cleared
             if not _is_cloudflare_page(driver) and not _is_cloudflare_challenge(driver):
                 print("  [CF] Cloudflare验证已通过！")
                 return True
 
-            # Look for a Turnstile iframe (may appear seconds after page load;
-            # may also be inside a Shadow DOM which standard selectors miss)
             if not iframe_clicked:
-                # Standard Selenium search
                 std_iframes = driver.find_elements(By.CSS_SELECTOR, _CF_IFRAME_SELECTOR)
                 cf_iframe = std_iframes[0] if std_iframes else _find_cf_challenge_iframe(driver)
-                via = "标准" if std_iframes else "ShadowDOM"
                 if cf_iframe:
                     src = (cf_iframe.get_attribute("src") or "")[:100]
                     title = cf_iframe.get_attribute("title") or ""
+                    via = "标准" if std_iframes else "ShadowDOM"
                     print(f"  [CF] 检测到Turnstile iframe ({via}): title='{title}', src={src}")
-
                     driver.switch_to.frame(cf_iframe)
                     clicked = False
                     try:
@@ -404,9 +420,7 @@ def _handle_cloudflare_challenge(driver):
                             driver.switch_to.default_content()
                         except Exception:
                             pass
-
                     if not clicked:
-                        # Turnstile widget is 300×65px; checkbox sits ~25px from left
                         try:
                             ActionChains(driver).move_to_element_with_offset(
                                 cf_iframe, 25, 32
@@ -415,46 +429,17 @@ def _handle_cloudflare_challenge(driver):
                             print("  [CF] 已在iframe坐标(25,32)点击。")
                         except Exception as e:
                             print(f"  [CF] 坐标点击失败: {e}")
-
                     if clicked:
                         iframe_clicked = True
                 else:
                     no_iframe_ticks += 1
                     remaining = int(deadline - time.time())
-                    if not iframe_clicked:
-                        # Strategy: find the Turnstile container via the hidden response
-                        # inputs that Cloudflare always puts in the main DOM.
-                        # The widget container (closed shadow root host) has an id like
-                        # "cf-chl-widget-{id}" derived from the input id.
-                        if no_iframe_ticks == 2:
-                            try:
-                                resp_inputs = driver.find_elements(
-                                    By.CSS_SELECTOR,
-                                    "input[id*='cf-chl-widget'][id$='_response']"
-                                )
-                                if resp_inputs:
-                                    input_id = resp_inputs[0].get_attribute("id")
-                                    widget_id = input_id.rsplit("_", 1)[0]  # e.g. cf-chl-widget-sdajq
-                                    print(f"  [CF] 找到Turnstile widget响应字段: {input_id}")
-                                    try:
-                                        container = driver.find_element(By.ID, widget_id)
-                                        # Checkbox is ~25px from left of the 300×65px widget;
-                                        # move_to_element_with_offset is relative to element center
-                                        ActionChains(driver).move_to_element_with_offset(
-                                            container, -125, 0
-                                        ).pause(0.4).click().perform()
-                                        iframe_clicked = True
-                                        print(f"  [CF] 已点击widget容器 #{widget_id}")
-                                    except Exception as e:
-                                        print(f"  [CF] widget容器点击失败: {e}")
-                            except Exception as e:
-                                print(f"  [CF] 查找widget字段失败: {e}")
-
-                        # After ~10s still no luck — use screenshot + GPT
-                        if no_iframe_ticks == 5 and not iframe_clicked:
-                            print("  [CF] DOM未找到iframe，尝试截图识别并点击验证框...")
-                        if _click_cf_via_screenshot(driver):
-                            iframe_clicked = True
+                    # Starting at tick 5 (~10s), try screenshot click every 10 ticks.
+                    # Don't block on one attempt — keep retrying so a late-loading
+                    # challenge still gets clicked.
+                    if no_iframe_ticks >= 5 and (no_iframe_ticks - 5) % 10 == 0:
+                        print(f"  [CF] 截图尝试 (tick {no_iframe_ticks})...")
+                        _click_cf_via_screenshot(driver)
                     print(f"  [CF] 等待中（无iframe）... 剩余 {remaining}s")
         except Exception as e:
             print(f"  [CF] 轮询异常: {e}")
@@ -462,6 +447,7 @@ def _handle_cloudflare_challenge(driver):
                 driver.switch_to.default_content()
             except Exception:
                 pass
+        time.sleep(2)
 
         time.sleep(2)
 
