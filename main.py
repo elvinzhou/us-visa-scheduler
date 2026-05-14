@@ -645,6 +645,11 @@ def get_available_dates(driver, wait):
     driver.execute_script("window.__slotFound = null; window.__slotDays = [];")
 
     wait.until(EC.presence_of_element_located((By.ID, "post_select")))
+    # Wait for the specific option to appear — the dropdown's options are AJAX-populated
+    # and may not be in the DOM yet even though the <select> element is present.
+    wait.until(EC.presence_of_element_located(
+        (By.CSS_SELECTOR, f"#post_select option[value='{LOCATION_VALUE_ID}']")
+    ))
     Select(driver.find_element(By.ID, "post_select")).select_by_value(LOCATION_VALUE_ID)
     print(f"已选择领事馆: {LOCATION_NAME}，等待API响应...")
 
