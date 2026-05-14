@@ -307,16 +307,6 @@ def _click_cf_via_screenshot(driver):
     pixel coordinates of the checkbox, then click there with a human-like ActionChains.
     Returns True if a click was attempted with valid coordinates."""
     try:
-        # Only proceed if the challenge text is actually visible on the page
-        body_text = ""
-        try:
-            body_text = driver.find_element(By.TAG_NAME, "body").text.lower()
-        except Exception:
-            pass
-        if not any(kw in body_text for kw in ("verify", "human", "challenge", "check")):
-            print("  [CF] 挑战文字未出现，跳过截图。")
-            return False
-
         img_b64 = driver.get_screenshot_as_base64()
         resp = openai_client.chat.completions.create(
             model="gpt-4o-mini",
