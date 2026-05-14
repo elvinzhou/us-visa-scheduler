@@ -370,7 +370,42 @@ def _handle_cloudflare_challenge(driver):
                     if clicked:
                         iframe_clicked = True
                 else:
-                    print(f"  [CF] 等待中（无iframe）... 剩余 {int(deadline - time.time())}s")
+                    remaining = int(deadline - time.time())
+                    # Every ~10s, dump a full DOM snapshot so we can see what's there
+                    if remaining % 10 == 1 or remaining >= 57:
+                        try:
+                            dom_info = driver.execute_script("""
+                                var lines = [];
+                                var iframes = document.querySelectorAll('iframe');
+                                lines.push('iframes(' + iframes.length + '):');
+                                iframes.forEach(function(f) {
+                                    lines.push('  src=' + (f.getAttribute('src')||'').substring(0,80)
+                                        + ' title=' + (f.getAttribute('title')||'none'));
+                                });
+                                var shadowCount = 0;
+                                document.querySelectorAll('*').forEach(function(el) {
+                                    if (el.shadowRoot) {
+                                        shadowCount++;
+                                        var si = el.shadowRoot.querySelectorAll('iframe');
+                                        lines.push('shadowRoot on <' + el.tagName
+                                            + ' id=' + (el.id||'') + '>: ' + si.length + ' iframes');
+                                        si.forEach(function(f) {
+                                            lines.push('  src=' + (f.getAttribute('src')||'').substring(0,80));
+                                        });
+                                    }
+                                });
+                                if (shadowCount === 0) lines.push('(no shadow roots)');
+                                var cfEls = document.querySelectorAll('[class*="cf-"],[id*="cf-"],[class*="turnstile"],[id*="turnstile"]');
+                                lines.push('cf/turnstile elements: ' + cfEls.length);
+                                cfEls.forEach(function(el) {
+                                    lines.push('  <' + el.tagName + ' id=' + (el.id||'') + ' class=' + (el.className||'').substring(0,40) + '>');
+                                });
+                                return lines.join('\\n');
+                            """)
+                            print(f"  [CF-DOM] {dom_info.replace(chr(10), chr(10) + '  [CF-DOM] ')}")
+                        except Exception as de:
+                            print(f"  [CF-DOM] 诊断失败: {de}")
+                    print(f"  [CF] 等待中（无iframe）... 剩余 {remaining}s")
         except Exception as e:
             print(f"  [CF] 轮询异常: {e}")
             try:
