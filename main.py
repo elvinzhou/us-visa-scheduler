@@ -249,11 +249,53 @@ _CF_IFRAME_SELECTOR = (
     "iframe[title*='cloudflare' i]"
 )
 
+# JavaScript that finds the Turnstile iframe even when it is nested inside a
+# Shadow DOM (Cloudflare's Turnstile widget attaches a shadow root to the
+# .cf-turnstile host element and injects the <iframe> inside it).
+_CF_IFRAME_JS = """
+    function crawl(root) {
+        try {
+            var iframes = Array.from(root.querySelectorAll('iframe') || []);
+            for (var i = 0; i < iframes.length; i++) {
+                var f = iframes[i];
+                var src = f.getAttribute('src') || '';
+                var title = (f.getAttribute('title') || '').toLowerCase();
+                if (src.indexOf('challenges.cloudflare.com') !== -1 ||
+                    src.indexOf('cloudflare.com/cdn-cgi/challenge') !== -1 ||
+                    title.indexOf('challenge') !== -1) {
+                    return f;
+                }
+            }
+            var els = Array.from(root.querySelectorAll('*') || []);
+            for (var j = 0; j < els.length; j++) {
+                if (els[j].shadowRoot) {
+                    var found = crawl(els[j].shadowRoot);
+                    if (found) return found;
+                }
+            }
+        } catch(e) {}
+        return null;
+    }
+    return crawl(document);
+"""
+
+def _find_cf_challenge_iframe(driver):
+    """Find Cloudflare Turnstile iframe, including those inside Shadow DOM."""
+    # Standard approach first (fast path)
+    iframes = driver.find_elements(By.CSS_SELECTOR, _CF_IFRAME_SELECTOR)
+    if iframes:
+        return iframes[0]
+    # Shadow DOM pierce via JavaScript
+    try:
+        return driver.execute_script(_CF_IFRAME_JS)
+    except Exception:
+        return None
+
 def _is_cloudflare_challenge(driver):
     """Detect a Cloudflare Turnstile checkbox challenge (distinct from the
     brief 'just a moment' interstitial which resolves on its own)."""
     try:
-        if driver.find_elements(By.CSS_SELECTOR, _CF_IFRAME_SELECTOR):
+        if _find_cf_challenge_iframe(driver):
             return True
         body = driver.find_element(By.TAG_NAME, "body").text.lower()
         return "verify you are human" in body or "complete the security check" in body
@@ -280,14 +322,17 @@ def _handle_cloudflare_challenge(driver):
                 print("  [CF] Cloudflare验证已通过！")
                 return True
 
-            # Look for a Turnstile iframe (it may appear seconds after page load)
+            # Look for a Turnstile iframe (may appear seconds after page load;
+            # may also be inside a Shadow DOM which standard selectors miss)
             if not iframe_clicked:
-                iframes = driver.find_elements(By.CSS_SELECTOR, _CF_IFRAME_SELECTOR)
-                if iframes:
-                    cf_iframe = iframes[0]
+                # Standard Selenium search
+                std_iframes = driver.find_elements(By.CSS_SELECTOR, _CF_IFRAME_SELECTOR)
+                cf_iframe = std_iframes[0] if std_iframes else _find_cf_challenge_iframe(driver)
+                via = "标准" if std_iframes else "ShadowDOM"
+                if cf_iframe:
                     src = (cf_iframe.get_attribute("src") or "")[:100]
                     title = cf_iframe.get_attribute("title") or ""
-                    print(f"  [CF] 检测到Turnstile iframe: title='{title}', src={src}")
+                    print(f"  [CF] 检测到Turnstile iframe ({via}): title='{title}', src={src}")
 
                     driver.switch_to.frame(cf_iframe)
                     clicked = False
