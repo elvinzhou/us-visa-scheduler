@@ -241,11 +241,18 @@ def _is_cloudflare_page(driver):
     except Exception:
         return False
 
+_CF_IFRAME_SELECTOR = (
+    "iframe[src*='challenges.cloudflare.com'],"
+    "iframe[src*='cloudflare.com'],"
+    "iframe[title*='challenge' i],"
+    "iframe[title*='cloudflare' i]"
+)
+
 def _is_cloudflare_challenge(driver):
     """Detect a Cloudflare Turnstile checkbox challenge (distinct from the
     brief 'just a moment' interstitial which resolves on its own)."""
     try:
-        if driver.find_elements(By.CSS_SELECTOR, "iframe[src*='challenges.cloudflare.com']"):
+        if driver.find_elements(By.CSS_SELECTOR, _CF_IFRAME_SELECTOR):
             return True
         body = driver.find_element(By.TAG_NAME, "body").text.lower()
         return "verify you are human" in body or "complete the security check" in body
@@ -263,7 +270,7 @@ def _handle_cloudflare_challenge(driver):
     try:
         iframe = WebDriverWait(driver, 5).until(
             EC.presence_of_element_located(
-                (By.CSS_SELECTOR, "iframe[src*='challenges.cloudflare.com']")
+                (By.CSS_SELECTOR, _CF_IFRAME_SELECTOR)
             )
         )
         print("检测到Turnstile验证框，尝试自动点击...")
