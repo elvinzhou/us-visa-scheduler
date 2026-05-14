@@ -850,6 +850,32 @@ def get_available_dates(driver, wait):
 
 # --- 主程序 ---
 def main():
+    import subprocess, signal
+    # Kill any stale Chrome processes holding the profile directory lock.
+    # These are left behind when the script is interrupted (Ctrl+C) while
+    # Chrome is running, preventing a new session from starting.
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", f"chrome.*{PROFILE_DIR}"],
+            capture_output=True, text=True
+        )
+        pids = result.stdout.strip().split()
+        if pids:
+            print(f"发现 {len(pids)} 个残留Chrome进程 (PIDs: {' '.join(pids)})，正在清理...")
+            for pid in pids:
+                try:
+                    os.kill(int(pid), signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+            time.sleep(2)
+    except Exception:
+        pass
+    # Remove SingletonLock if Chrome left it behind
+    lock_path = os.path.join(PROFILE_DIR, "SingletonLock")
+    if os.path.exists(lock_path):
+        os.remove(lock_path)
+        print("已删除残留的 SingletonLock。")
+
     options = uc.ChromeOptions()
     for arg in ["--no-first-run", "--no-service-autorun", "--password-store=basic"]:
         options.add_argument(arg)
