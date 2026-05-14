@@ -335,22 +335,39 @@ def _click_cf_via_screenshot(driver):
         parts = raw.replace(" ", "").split(",")
         gpt_x, gpt_y = int(parts[0]), int(parts[1])
 
+        # Prefer pyautogui: sends OS-level X11 events that Chrome can't distinguish
+        # from genuine user input, bypassing WebDriver synthetic-event detection.
+        try:
+            import pyautogui
+            win_pos = driver.get_window_position()
+            win_size = driver.get_window_size()
+            inner_h = driver.execute_script("return window.innerHeight")
+            chrome_h = win_size["height"] - inner_h  # title bar + address bar height
+            screen_x = win_pos["x"] + gpt_x
+            screen_y = win_pos["y"] + chrome_h + gpt_y
+            pyautogui.moveTo(screen_x - 40, screen_y - 20, duration=0.3)
+            pyautogui.moveTo(screen_x, screen_y, duration=0.2)
+            time.sleep(0.3)
+            pyautogui.click(screen_x, screen_y)
+            print(f"  [CF] pyautogui点击 ({screen_x}, {screen_y}) [viewport ({gpt_x}, {gpt_y})]")
+            return True
+        except ImportError:
+            print("  [CF] pyautogui未安装，回退到ActionChains...")
+        except Exception as e:
+            print(f"  [CF] pyautogui失败: {e}，回退到ActionChains...")
+
+        # Fallback: ActionChains synthetic click
         body = driver.find_element(By.TAG_NAME, "body")
         rect = driver.execute_script("return document.body.getBoundingClientRect();")
         center_x = rect["x"] + rect["width"] / 2
         center_y = rect["y"] + rect["height"] / 2
-
-        # Brief random mouse movement before clicking (more human-like)
         ActionChains(driver).move_to_element_with_offset(
-            body,
-            random.randint(-100, 100),
-            random.randint(-50, 50),
+            body, random.randint(-100, 100), random.randint(-50, 50)
         ).pause(0.3).perform()
-
         ActionChains(driver).move_to_element_with_offset(
             body, gpt_x - center_x, gpt_y - center_y
         ).pause(0.4).click().perform()
-        print(f"  [CF] 已截图点击 ({gpt_x}, {gpt_y})")
+        print(f"  [CF] ActionChains点击 ({gpt_x}, {gpt_y})")
         return True
     except Exception as e:
         print(f"  [CF] screenshot点击失败: {e}")

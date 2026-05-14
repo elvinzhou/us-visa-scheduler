@@ -3,3 +3,5 @@ selenium
 python-dotenv
 setuptools
 openai
+pyautogui
+python-xlib
